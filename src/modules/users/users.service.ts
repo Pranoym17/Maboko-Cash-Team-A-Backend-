@@ -6,6 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
+import QRCode from 'qrcode';
 import { User } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { Wallet } from '../wallets/entities/wallet.entity';
@@ -38,6 +39,11 @@ export class UsersService {
 
     const savedUser = await this.usersRepository.save(user);
 
+    // Generate QR code for the user
+    const qrCodeData = await this.generateQRCode(savedUser.id);
+    savedUser.qrCode = qrCodeData;
+    await this.usersRepository.save(savedUser);
+
     const wallet = this.walletsRepository.create({
       user: savedUser,
       balance: '0.00',
@@ -64,6 +70,38 @@ export class UsersService {
 
     if (!user) {
       throw new NotFoundException('User not found');
+    }
+
+    return user;
+  }
+
+  private async generateQRCode(userId: string): Promise<string> {
+    try {
+      const qrCodeDataUrl = await QRCode.toDataURL(userId);
+      return qrCodeDataUrl;
+    } catch (error) {
+      throw new Error(`Failed to generate QR code: ${error.message}`);
+    }
+  }
+
+  async getQRCode(userId: string): Promise<string> {
+    const user = await this.findById(userId);
+
+    if (!user.qrCode) {
+      const qrCodeData = await this.generateQRCode(user.id);
+      user.qrCode = qrCodeData;
+      await this.usersRepository.save(user);
+    }
+
+    return user.qrCode;
+  }
+
+  async scanQRCode(qrCodeData: string): Promise<User> {
+    // QR code data contains the user ID
+    const user = await this.findById(qrCodeData);
+
+    if (!user.isActive) {
+      throw new NotFoundException('User is not active');
     }
 
     return user;

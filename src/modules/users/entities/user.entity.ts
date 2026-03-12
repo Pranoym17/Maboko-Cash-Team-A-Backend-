@@ -33,6 +33,9 @@ export class User {
   @Column({ default: true })
   isActive: boolean;
 
+  @Column({ type: 'text', nullable: true })
+  qrCode: string;
+
   @OneToOne(() => Wallet, (wallet) => wallet.user)
   wallet: Wallet;
 
