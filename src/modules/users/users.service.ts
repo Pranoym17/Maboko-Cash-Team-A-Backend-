@@ -46,7 +46,7 @@ export class UsersService {
 
     await this.walletsRepository.save(wallet);
 
-    return savedUser;
+    return this.findById(savedUser.id);
   }
 
   async findByEmail(email: string): Promise<User | null> {

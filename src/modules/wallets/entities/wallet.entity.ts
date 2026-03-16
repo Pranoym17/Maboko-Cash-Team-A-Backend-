@@ -3,11 +3,13 @@ import {
   CreateDateColumn,
   Entity,
   JoinColumn,
+  OneToMany,
   OneToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
+import { WalletTransaction } from './wallet-transaction.entity';
 
 @Entity('wallets')
 export class Wallet {
@@ -23,6 +25,9 @@ export class Wallet {
 
   @Column({ default: 'CDF' })
   currency: string;
+
+  @OneToMany(() => WalletTransaction, (transaction) => transaction.wallet)
+  transactions: WalletTransaction[];
 
   @CreateDateColumn()
   createdAt: Date;
