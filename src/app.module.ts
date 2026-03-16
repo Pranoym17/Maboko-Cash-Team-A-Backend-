@@ -4,6 +4,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { WalletsModule } from './modules/wallets/wallets.module';
+import { LedgerModule } from './modules/ledger/ledger.module';
+import { TransactionsModule } from './modules/transactions/transactions.module';
 import { getDatabaseConfig } from './config/database.config';
 
 @Module({
@@ -19,6 +21,8 @@ import { getDatabaseConfig } from './config/database.config';
     UsersModule,
     AuthModule,
     WalletsModule,
+    LedgerModule,
+    TransactionsModule,
   ],
 })
 export class AppModule {}

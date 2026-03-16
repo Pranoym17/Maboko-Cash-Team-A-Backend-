@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 import { WalletTransaction } from './wallet-transaction.entity';
+import { LedgerEntry } from '../../ledger/entities/ledger-entry.entity';
 
 @Entity('wallets')
 export class Wallet {
@@ -28,6 +29,9 @@ export class Wallet {
 
   @OneToMany(() => WalletTransaction, (transaction) => transaction.wallet)
   transactions: WalletTransaction[];
+
+  @OneToMany(() => LedgerEntry, (entry) => entry.wallet)
+  ledgerEntries: LedgerEntry[];
 
   @CreateDateColumn()
   createdAt: Date;
