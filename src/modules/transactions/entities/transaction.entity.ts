@@ -4,6 +4,7 @@ import {
   Entity,
   PrimaryGeneratedColumn,
 } from 'typeorm';
+import { TransactionStatus } from '../enums/transaction-status.enum';
 
 @Entity('transactions')
 export class Transaction {
@@ -25,8 +26,12 @@ export class Transaction {
   @Column({ default: 'CDF' })
   currency: string;
 
-  @Column({ default: 'completed' })
-  status: string;
+  @Column({
+    type: 'enum',
+    enum: TransactionStatus,
+    default: TransactionStatus.PENDING,
+  })
+  status: TransactionStatus;
 
   @Column({ type: 'varchar', nullable: true })
   description?: string;
@@ -34,6 +39,7 @@ export class Transaction {
   @Column({ default: 'peer_to_peer_transfer' })
   type: string;
 
+  // FX snapshot fields
   @Column({ type: 'varchar', length: 3, nullable: true })
   sourceCurrency?: string;
 

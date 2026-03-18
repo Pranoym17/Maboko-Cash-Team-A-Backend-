@@ -19,7 +19,7 @@ import { Transaction } from '../transactions/entities/transaction.entity';
 import { LedgerEntry } from '../ledger/entities/ledger-entry.entity';
 import { LedgerEntryType } from '../ledger/enums/ledger-entry-type.enum';
 import { User } from '../users/entities/user.entity';
-
+import { TransactionStatus } from '../transactions/enums/transaction-status.enum';
 @Injectable()
 export class FxService {
   constructor(
@@ -164,7 +164,7 @@ export class FxService {
         receiverUserId: userId,
         amount: convertedAmount.toFixed(2),
         currency: 'CDF',
-        status: 'completed',
+        status: TransactionStatus.COMPLETED,
         description: dto.description ?? `FX deposit from ${conversion.sourceCurrency}`,
         type: 'fx_deposit',
         sourceCurrency: conversion.sourceCurrency,
