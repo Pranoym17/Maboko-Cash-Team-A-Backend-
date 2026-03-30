@@ -9,6 +9,8 @@ import { LedgerModule } from './modules/ledger/ledger.module';
 import { TransactionsModule } from './modules/transactions/transactions.module';
 import { FxModule } from './modules/fx/fx.module';
 import { getDatabaseConfig } from './config/database.config';
+import { MobileMoneyModule } from './modules/mobile-money/mobile-money.module';
+import { BankTransfersModule } from './modules/bank-transfers/bank-transfers.module';
 
 @Module({
   imports: [
@@ -27,6 +29,8 @@ import { getDatabaseConfig } from './config/database.config';
     LedgerModule,
     TransactionsModule,
     FxModule,
+    MobileMoneyModule,
+    BankTransfersModule,
   ],
 })
 export class AppModule {}
