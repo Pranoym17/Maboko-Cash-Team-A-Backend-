@@ -22,5 +22,6 @@ import { LedgerEntry } from '../ledger/entities/ledger-entry.entity';
   ],
   controllers: [MobileMoneyController],
   providers: [MobileMoneyService],
+  exports: [MobileMoneyService],
 })
 export class MobileMoneyModule {}

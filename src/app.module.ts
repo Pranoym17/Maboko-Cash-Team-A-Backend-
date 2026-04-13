@@ -11,6 +11,7 @@ import { FxModule } from './modules/fx/fx.module';
 import { getDatabaseConfig } from './config/database.config';
 import { MobileMoneyModule } from './modules/mobile-money/mobile-money.module';
 import { BankTransfersModule } from './modules/bank-transfers/bank-transfers.module';
+import { AdminModule } from './modules/admin/admin.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { BankTransfersModule } from './modules/bank-transfers/bank-transfers.mod
     FxModule,
     MobileMoneyModule,
     BankTransfersModule,
+    AdminModule,
   ],
 })
 export class AppModule {}

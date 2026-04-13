@@ -1,6 +1,12 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import { Role } from '../../common/enums/role.enum';
 import { UsersService } from '../users/users.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -10,13 +16,32 @@ export class AuthService {
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
   ) {}
 
   async register(registerDto: RegisterDto) {
+    const requestedRole =
+      registerDto.role === 'admin' ? Role.ADMIN : Role.USER;
+
+    if (requestedRole === Role.ADMIN) {
+      const expectedPasscode =
+        this.configService.get<string>('ADMIN_SIGNUP_PASSCODE');
+
+      if (
+        !expectedPasscode ||
+        registerDto.adminPasscode !== expectedPasscode
+      ) {
+        throw new ForbiddenException('Invalid admin signup passcode');
+      }
+    }
+
     const user = await this.usersService.create(registerDto);
 
     return {
-      message: 'User registered successfully',
+      message:
+        requestedRole === Role.ADMIN
+          ? 'Admin registered successfully'
+          : 'User registered successfully',
       user: {
         id: user.id,
         email: user.email,

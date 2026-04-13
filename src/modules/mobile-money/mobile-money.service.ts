@@ -70,17 +70,96 @@ export class MobileMoneyService {
       where: { externalReference: dto.externalReference },
     });
 
+    return this.processDecision(mmTx, dto.status, dto.message);
+  }
+
+  async listAllTransactions(filters: {
+    status?: string;
+    type?: string;
+    userId?: string;
+    search?: string;
+    page: number;
+    limit: number;
+  }) {
+    const qb = this.mobileMoneyRepo.createQueryBuilder('mm');
+
+    if (filters.status) {
+      qb.andWhere('LOWER(mm.status) = LOWER(:status)', {
+        status: filters.status,
+      });
+    }
+
+    if (filters.type) {
+      qb.andWhere('LOWER(mm.type) = LOWER(:type)', { type: filters.type });
+    }
+
+    if (filters.userId) {
+      qb.andWhere('mm.userId = :userId', { userId: filters.userId });
+    }
+
+    if (filters.search) {
+      qb.andWhere(
+        '(CAST(mm.userId AS TEXT) ILIKE :search OR mm.externalReference ILIKE :search OR mm.phoneNumber ILIKE :search)',
+        { search: `%${filters.search}%` },
+      );
+    }
+
+    qb.orderBy('mm.createdAt', 'DESC');
+    qb.skip((filters.page - 1) * filters.limit).take(filters.limit);
+
+    const [items, total] = await qb.getManyAndCount();
+
+    return {
+      items,
+      total,
+      page: filters.page,
+      limit: filters.limit,
+    };
+  }
+
+  async getTransactionById(id: string) {
+    const mmTx = await this.mobileMoneyRepo.findOne({
+      where: { id },
+    });
+
     if (!mmTx) {
       throw new NotFoundException('Mobile money transaction not found');
     }
 
-    if (mmTx.status === MobileMoneyStatus.COMPLETED) {
-      throw new BadRequestException('Mobile money transaction already completed');
+    return mmTx;
+  }
+
+  async approveById(id: string, message?: string) {
+    const mmTx = await this.getTransactionById(id);
+    return this.processDecision(mmTx, MobileMoneyStatus.COMPLETED, message);
+  }
+
+  async rejectById(id: string, message?: string) {
+    const mmTx = await this.getTransactionById(id);
+    return this.processDecision(mmTx, MobileMoneyStatus.FAILED, message);
+  }
+
+  private async processDecision(
+    mmTx: MobileMoneyTransaction | null,
+    status: MobileMoneyStatus,
+    message?: string,
+  ) {
+    if (!mmTx) {
+      throw new NotFoundException('Mobile money transaction not found');
     }
 
-    if (dto.status === MobileMoneyStatus.FAILED) {
+    if (
+      mmTx.status === MobileMoneyStatus.COMPLETED ||
+      mmTx.status === MobileMoneyStatus.FAILED
+    ) {
+      throw new BadRequestException(
+        'Mobile money transaction already finalized',
+      );
+    }
+
+    if (status === MobileMoneyStatus.FAILED) {
       mmTx.status = MobileMoneyStatus.FAILED;
-      mmTx.callbackMessage = dto.message;
+      mmTx.callbackMessage = message;
       return this.mobileMoneyRepo.save(mmTx);
     }
 
@@ -161,7 +240,7 @@ export class MobileMoneyService {
       await walletTxRepo.save(walletTx);
 
       mmTx.status = MobileMoneyStatus.COMPLETED;
-      mmTx.callbackMessage = dto.message;
+      mmTx.callbackMessage = message;
       await mmRepo.save(mmTx);
 
       return {

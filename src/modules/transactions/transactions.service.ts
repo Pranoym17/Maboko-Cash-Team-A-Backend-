@@ -237,9 +237,28 @@ export class TransactionsService {
     });
   }
 
+  async getTransactionsForUser(userId: string) {
+    return this.transactionsRepository.find({
+      where: [{ senderUserId: userId }, { receiverUserId: userId }],
+      order: { createdAt: 'DESC' },
+    });
+  }
+
   async getTransactionById(id: string) {
     const tx = await this.transactionsRepository.findOne({
       where: { id },
+    });
+
+    if (!tx) throw new NotFoundException('Not found');
+    return tx;
+  }
+
+  async getTransactionForUser(userId: string, id: string) {
+    const tx = await this.transactionsRepository.findOne({
+      where: [
+        { id, senderUserId: userId },
+        { id, receiverUserId: userId },
+      ],
     });
 
     if (!tx) throw new NotFoundException('Not found');

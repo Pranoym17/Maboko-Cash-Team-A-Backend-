@@ -7,6 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import QRCode from 'qrcode';
+import { Role } from '../../common/enums/role.enum';
 import { User } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { Wallet } from '../wallets/entities/wallet.entity';
@@ -35,6 +36,7 @@ export class UsersService {
       fullName: createUserDto.fullName,
       email: createUserDto.email,
       passwordHash,
+      role: createUserDto.role === 'admin' ? Role.ADMIN : Role.USER,
     });
 
     const savedUser = await this.usersRepository.save(user);
