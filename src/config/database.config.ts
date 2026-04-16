@@ -9,4 +9,7 @@ export const getDatabaseConfig = (configService: ConfigService) => ({
   database: configService.get<string>('DB_NAME'),
   autoLoadEntities: true,
   synchronize: true,
+  ...(configService.get<string>('DB_SSL') === 'true' && {
+    ssl: { rejectUnauthorized: false },
+  }),
 });

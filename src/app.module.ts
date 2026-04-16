@@ -12,11 +12,13 @@ import { getDatabaseConfig } from './config/database.config';
 import { MobileMoneyModule } from './modules/mobile-money/mobile-money.module';
 import { BankTransfersModule } from './modules/bank-transfers/bank-transfers.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { TranslationModule } from './modules/translation/translation.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: ['.env.local', '.env'],
     }),
     ScheduleModule.forRoot(),
     TypeOrmModule.forRootAsync({
@@ -33,6 +35,7 @@ import { AdminModule } from './modules/admin/admin.module';
     MobileMoneyModule,
     BankTransfersModule,
     AdminModule,
+    TranslationModule,
   ],
 })
 export class AppModule {}
