@@ -19,7 +19,7 @@ export class SupportConversation {
   @Column()
   userId: string;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   assignedAdminId: string | null;
 
   @Column()

@@ -7,8 +7,21 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { UsersService } from './users.service';
-import { User } from './entities/user.entity';
 import { ScanQRCodeDto } from './dto/scan-qrcode.dto';
+
+type QRCodeResponse = {
+  userId: string;
+  qrCode: string;
+  qrCodeData: string;
+};
+
+type ScannedQRCodeUserResponse = {
+  id: string;
+  email: string;
+  fullName: string;
+  role: string;
+  isActive: boolean;
+};
 
 @ApiTags('Users')
 @Controller('users')
@@ -22,9 +35,13 @@ export class UsersController {
     description: 'QR code retrieved successfully',
   })
   @ApiResponse({ status: 404, description: 'User not found' })
-  async getQRCode(@Param('id') userId: string): Promise<{ qrCode: string }> {
+  async getQRCode(@Param('id') userId: string): Promise<QRCodeResponse> {
     const qrCode = await this.usersService.getQRCode(userId);
-    return { qrCode };
+    return {
+      userId,
+      qrCode,
+      qrCodeData: userId,
+    };
   }
 
   @Post('qrcode/scan')
@@ -32,10 +49,18 @@ export class UsersController {
   @ApiResponse({
     status: 200,
     description: 'User data retrieved successfully from QR code scan',
-    type: User,
   })
   @ApiResponse({ status: 404, description: 'User not found or inactive' })
-  async scanQRCode(@Body() scanQRCodeDto: ScanQRCodeDto): Promise<User> {
-    return this.usersService.scanQRCode(scanQRCodeDto.qrCodeData);
+  async scanQRCode(
+    @Body() scanQRCodeDto: ScanQRCodeDto,
+  ): Promise<ScannedQRCodeUserResponse> {
+    const user = await this.usersService.scanQRCode(scanQRCodeDto.qrCodeData);
+    return {
+      id: user.id,
+      email: user.email,
+      fullName: user.fullName,
+      role: user.role,
+      isActive: user.isActive,
+    };
   }
 }

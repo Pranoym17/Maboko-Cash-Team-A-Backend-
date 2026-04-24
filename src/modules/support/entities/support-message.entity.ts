@@ -19,10 +19,10 @@ export class SupportMessage {
   })
   conversation: SupportConversation;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   senderUserId: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   senderAdminId: string | null;
 
   @Column({

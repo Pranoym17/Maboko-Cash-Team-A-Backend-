@@ -1,10 +1,14 @@
 import {
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, SelectQueryBuilder } from 'typeorm';
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { SupportConversation } from './entities/support-conversation.entity';
 import { SupportMessage } from './entities/support-message.entity';
 import { CreateSupportConversationDto } from './dto/create-support-conversation.dto';
@@ -16,6 +20,8 @@ import { UpdateSupportAssignmentDto } from './dto/update-support-assignment.dto'
 import { AdminSupportQueryDto } from '../admin/dto/admin-support-query.dto';
 import { SupportConversationStatus } from './enums/support-conversation-status.enum';
 import { SupportPriority } from './enums/support-priority.enum';
+import { SupportGateway } from './support.gateway';
+import { SupportMessageRead } from './entities/support-message-read.entity';
 
 @Injectable()
 export class SupportService {
@@ -24,6 +30,12 @@ export class SupportService {
     private readonly conversationsRepository: Repository<SupportConversation>,
     @InjectRepository(SupportMessage)
     private readonly messagesRepository: Repository<SupportMessage>,
+    @InjectRepository(SupportMessageRead)
+    private readonly readsRepository: Repository<SupportMessageRead>,
+    private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
+    @Inject(forwardRef(() => SupportGateway))
+    private readonly supportGateway: SupportGateway,
   ) {}
 
   async createConversation(userId: string, body: CreateSupportConversationDto) {
@@ -51,7 +63,11 @@ export class SupportService {
       }),
     );
 
-    return this.getConversationForUser(userId, conversation.id);
+    const fullConversation = await this.getConversationForUser(userId, conversation.id);
+    this.supportGateway.emitConversationCreated(fullConversation, userId);
+    await this.supportGateway.emitUnreadCount(userId, SupportSenderRole.USER);
+    await this.supportGateway.emitUnreadCount('admins', SupportSenderRole.ADMIN);
+    return fullConversation;
   }
 
   async listUserConversations(userId: string) {
@@ -72,10 +88,14 @@ export class SupportService {
       throw new NotFoundException('Support conversation not found');
     }
 
-    return {
+    await this.markConversationRead(conversationId, userId, SupportSenderRole.USER);
+
+    const result = {
       ...conversation,
       messages: conversation.messages.filter((message) => !message.isInternalNote),
     };
+    await this.supportGateway.emitUnreadCount(userId, SupportSenderRole.USER);
+    return result;
   }
 
   async addMessageForUser(
@@ -109,7 +129,11 @@ export class SupportService {
       conversation.resolvedAt = null;
     }
     await this.conversationsRepository.save(conversation);
-    return this.getConversationForUser(userId, conversationId);
+    const fullConversation = await this.getConversationForUser(userId, conversationId);
+    this.supportGateway.emitConversationUpdated(conversationId, fullConversation);
+    await this.supportGateway.emitUnreadCount(userId, SupportSenderRole.USER);
+    await this.supportGateway.emitUnreadCount('admins', SupportSenderRole.ADMIN);
+    return fullConversation;
   }
 
   async listAdminConversations(query: AdminSupportQueryDto) {
@@ -152,6 +176,8 @@ export class SupportService {
       throw new NotFoundException('Support conversation not found');
     }
 
+    await this.markConversationRead(conversationId, 'admins', SupportSenderRole.ADMIN);
+    await this.supportGateway.emitUnreadCount('admins', SupportSenderRole.ADMIN);
     return conversation;
   }
 
@@ -186,7 +212,11 @@ export class SupportService {
 
     conversation.lastMessageAt = new Date();
     await this.conversationsRepository.save(conversation);
-    return this.getConversationForAdmin(conversationId);
+    const fullConversation = await this.getConversationForAdmin(conversationId);
+    this.supportGateway.emitConversationUpdated(conversationId, fullConversation);
+    await this.supportGateway.emitUnreadCount(conversation.userId, SupportSenderRole.USER);
+    await this.supportGateway.emitUnreadCount('admins', SupportSenderRole.ADMIN);
+    return fullConversation;
   }
 
   async assignConversation(
@@ -196,7 +226,9 @@ export class SupportService {
   ) {
     const conversation = await this.getConversationForAdmin(conversationId);
     conversation.assignedAdminId = body.assignedAdminId ?? adminUserId;
-    return this.conversationsRepository.save(conversation);
+    const savedConversation = await this.conversationsRepository.save(conversation);
+    this.supportGateway.emitConversationUpdated(conversationId, savedConversation);
+    return savedConversation;
   }
 
   async updateConversationStatus(
@@ -231,7 +263,115 @@ export class SupportService {
       );
     }
 
-    return this.getConversationForAdmin(conversationId);
+    const fullConversation = await this.getConversationForAdmin(conversationId);
+    this.supportGateway.emitConversationUpdated(conversationId, fullConversation);
+    await this.supportGateway.emitUnreadCount(conversation.userId, SupportSenderRole.USER);
+    await this.supportGateway.emitUnreadCount('admins', SupportSenderRole.ADMIN);
+    return fullConversation;
+  }
+
+  async authenticateSocket(client: { handshake: { auth?: { token?: string }; headers?: { authorization?: string } } }) {
+    const bearerToken =
+      client.handshake.auth?.token ??
+      client.handshake.headers?.authorization?.replace(/^Bearer\s+/i, '');
+
+    if (!bearerToken) {
+      throw new ForbiddenException('Missing websocket token');
+    }
+
+    return this.jwtService.verifyAsync(bearerToken, {
+      secret: this.configService.get<string>('JWT_SECRET') as string,
+    });
+  }
+
+  async assertSocketConversationAccess(userId: string, role: string, conversationId: string) {
+    if (String(role).toLowerCase() === 'admin') {
+      await this.getConversationForAdmin(conversationId);
+      return;
+    }
+
+    await this.getConversationForUser(userId, conversationId);
+  }
+
+  async getUnreadCount(userId: string, role: string) {
+    const roleKey = String(role).toLowerCase() === 'admin' ? SupportSenderRole.ADMIN : SupportSenderRole.USER;
+
+    const conversations = await this.conversationsRepository.find({
+      where: roleKey === SupportSenderRole.USER ? { userId } : {},
+      relations: { messages: true },
+    });
+
+    const reads = await this.readsRepository.find({
+      where: {
+        readerId: roleKey === SupportSenderRole.ADMIN ? 'admins' : userId,
+        readerRole: roleKey,
+      },
+      relations: { message: true },
+    });
+    const readIds = new Set(reads.map((entry) => entry.message.id));
+
+    let unreadCount = 0;
+
+    for (const conversation of conversations) {
+      const relevantMessages = conversation.messages.filter((message) => {
+        if (message.isInternalNote) {
+          return false;
+        }
+
+        if (roleKey === SupportSenderRole.USER) {
+          return message.senderRole !== SupportSenderRole.USER;
+        }
+
+        return message.senderRole === SupportSenderRole.USER;
+      });
+
+      unreadCount += relevantMessages.filter((message) => !readIds.has(message.id)).length;
+    }
+
+    return { unreadCount };
+  }
+
+  async markConversationRead(conversationId: string, readerId: string, readerRole: string) {
+    const conversation = await this.conversationsRepository.findOne({
+      where: { id: conversationId },
+      relations: { messages: true },
+    });
+
+    if (!conversation) {
+      throw new NotFoundException('Support conversation not found');
+    }
+
+    const targetMessages = conversation.messages.filter((message) => {
+      if (message.isInternalNote && readerRole !== SupportSenderRole.ADMIN) {
+        return false;
+      }
+
+      if (readerRole === SupportSenderRole.USER) {
+        return message.senderRole !== SupportSenderRole.USER;
+      }
+
+      return message.senderRole === SupportSenderRole.USER;
+    });
+
+    const existingReads = await this.readsRepository.find({
+      where: { readerId, readerRole },
+      relations: { message: true },
+    });
+    const existingIds = new Set(existingReads.map((item) => item.message.id));
+
+    const newReads = targetMessages
+      .filter((message) => !existingIds.has(message.id))
+      .map((message) =>
+        this.readsRepository.create({
+          message,
+          readerId,
+          readerRole,
+        }),
+      );
+
+    if (newReads.length > 0) {
+      await this.readsRepository.save(newReads);
+    }
   }
 
   private async paginate(

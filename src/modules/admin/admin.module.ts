@@ -24,6 +24,7 @@ import { MarketplaceCategory } from '../marketplace/entities/marketplace-categor
 import { MarketplaceProvider } from '../marketplace/entities/marketplace-provider.entity';
 import { SupportConversation } from '../support/entities/support-conversation.entity';
 import { SupportMessage } from '../support/entities/support-message.entity';
+import { SupportMessageRead } from '../support/entities/support-message-read.entity';
 import { MarketplaceModule } from '../marketplace/marketplace.module';
 import { SupportModule } from '../support/support.module';
 
@@ -46,6 +47,7 @@ import { SupportModule } from '../support/support.module';
       MarketplaceProvider,
       SupportConversation,
       SupportMessage,
+      SupportMessageRead,
     ]),
     UsersModule,
     TransactionsModule,

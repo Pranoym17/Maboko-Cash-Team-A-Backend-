@@ -196,9 +196,39 @@ export class Phase45MarketplaceSupport1760000001000
         END IF;
       END$$;
     `);
+
+    await queryRunner.query(`
+      CREATE TABLE IF NOT EXISTS "support_message_reads" (
+        "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
+        "readerId" character varying NOT NULL,
+        "readerRole" character varying NOT NULL,
+        "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
+        "messageId" uuid,
+        CONSTRAINT "PK_support_message_reads_id" PRIMARY KEY ("id")
+      )
+    `);
+
+    await queryRunner.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS "IDX_support_message_reads_unique"
+      ON "support_message_reads" ("messageId", "readerId", "readerRole")
+    `);
+
+    await queryRunner.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'FK_support_message_reads_messageId'
+        ) THEN
+          ALTER TABLE "support_message_reads"
+          ADD CONSTRAINT "FK_support_message_reads_messageId"
+          FOREIGN KEY ("messageId") REFERENCES "support_messages"("id") ON DELETE CASCADE;
+        END IF;
+      END$$;
+    `);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`DROP TABLE IF EXISTS "support_message_reads"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "support_messages"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "support_conversations"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "marketplace_providers"`);

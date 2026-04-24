@@ -31,10 +31,10 @@ export class MarketplaceProvider {
   @Column()
   integrationType: string;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   apiBaseUrl: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   authType: string | null;
 
   @Column({

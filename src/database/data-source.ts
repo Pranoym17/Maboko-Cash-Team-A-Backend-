@@ -17,6 +17,7 @@ import { MarketplaceCategory } from '../modules/marketplace/entities/marketplace
 import { MarketplaceProvider } from '../modules/marketplace/entities/marketplace-provider.entity';
 import { SupportConversation } from '../modules/support/entities/support-conversation.entity';
 import { SupportMessage } from '../modules/support/entities/support-message.entity';
+import { SupportMessageRead } from '../modules/support/entities/support-message-read.entity';
 
 export default new DataSource({
   type: 'postgres',
@@ -45,6 +46,7 @@ export default new DataSource({
     MarketplaceProvider,
     SupportConversation,
     SupportMessage,
+    SupportMessageRead,
   ],
   migrations: [__dirname + '/migrations/*{.ts,.js}'],
   ...(process.env.DB_SSL === 'true' && {

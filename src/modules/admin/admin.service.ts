@@ -326,7 +326,12 @@ export class AdminService {
   }
 
   async getUserQRCode(userId: string) {
-    return this.usersService.getQRCode(userId);
+    const qrCode = await this.usersService.getQRCode(userId);
+    return {
+      userId,
+      qrCode,
+      qrCodeData: userId,
+    };
   }
 
   async listTransactions(query: AdminTransactionsQueryDto) {

@@ -44,10 +44,10 @@ export class RewardRule {
   @Column({ type: 'timestamptz', nullable: true })
   endDate: Date | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   createdByAdminId: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   updatedByAdminId: string | null;
 
   @CreateDateColumn()

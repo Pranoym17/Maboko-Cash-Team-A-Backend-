@@ -26,7 +26,7 @@ export class Referral {
   @Column()
   referralCodeUsed: string;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   shareChannel: string | null;
 
   @Column({

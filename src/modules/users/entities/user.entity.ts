@@ -36,13 +36,13 @@ export class User {
   @Column({ type: 'text', nullable: true })
   qrCode: string;
 
-  @Column({ unique: true, nullable: true })
+  @Column({ type: 'varchar', unique: true, nullable: true })
   referralCode: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   referredByUserId: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   passwordResetToken: string | null;
 
   @Column({ type: 'timestamptz', nullable: true })

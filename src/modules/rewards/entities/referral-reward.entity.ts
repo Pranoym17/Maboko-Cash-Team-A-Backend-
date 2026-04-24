@@ -44,10 +44,10 @@ export class ReferralReward {
   })
   status: RewardStatus;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   approvedByAdminId: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   rejectedByAdminId: string | null;
 
   @ManyToOne(() => Wallet, { nullable: true, onDelete: 'SET NULL' })

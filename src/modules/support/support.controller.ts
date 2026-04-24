@@ -14,6 +14,11 @@ export class SupportController {
     return this.supportService.listUserConversations(req.user.sub);
   }
 
+  @Get('unread-count')
+  getUnreadCount(@Req() req: any) {
+    return this.supportService.getUnreadCount(req.user.sub, req.user.role);
+  }
+
   @Post('conversations')
   createConversation(@Req() req: any, @Body() body: CreateSupportConversationDto) {
     return this.supportService.createConversation(req.user.sub, body);
