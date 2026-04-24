@@ -7,9 +7,11 @@ import { User } from '../users/entities/user.entity';
 import { Wallet } from '../wallets/entities/wallet.entity';
 import { LedgerEntry } from '../ledger/entities/ledger-entry.entity';
 import { WalletTransaction } from '../wallets/entities/wallet-transaction.entity';
+import { ReferralsModule } from '../referrals/referrals.module';
 
 @Module({
   imports: [
+    ReferralsModule,
     TypeOrmModule.forFeature([
       Transaction,
       User,

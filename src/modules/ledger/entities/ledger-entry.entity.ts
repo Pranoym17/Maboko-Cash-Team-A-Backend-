@@ -14,8 +14,8 @@ export class LedgerEntry {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @ManyToOne(() => Transaction, { onDelete: 'CASCADE' })
-  transaction: Transaction;
+  @ManyToOne(() => Transaction, { onDelete: 'CASCADE', nullable: true })
+  transaction: Transaction | null;
 
   @ManyToOne(() => Wallet, (wallet) => wallet.ledgerEntries, { onDelete: 'CASCADE' })
   wallet: Wallet;

@@ -25,6 +25,19 @@ import { AdminBankQueryDto } from './dto/admin-bank-query.dto';
 import { AdminWalletsQueryDto } from './dto/admin-wallets-query.dto';
 import { TransactionStatus } from '../transactions/enums/transaction-status.enum';
 import { AdminListQueryDto } from './dto/admin-list-query.dto';
+import { ReferralsService } from '../referrals/referrals.service';
+import { RewardsService } from '../rewards/rewards.service';
+import { AdminReferralsQueryDto } from './dto/admin-referrals-query.dto';
+import { AdminRewardsQueryDto } from './dto/admin-rewards-query.dto';
+import { UpdateAdminUserProfileDto } from './dto/update-admin-user-profile.dto';
+import { AuditService } from '../audit/audit.service';
+import { randomUUID } from 'crypto';
+import { CreateRewardRuleDto } from '../rewards/dto/create-reward-rule.dto';
+import { UpdateRewardRuleDto } from '../rewards/dto/update-reward-rule.dto';
+import { Referral } from '../referrals/entities/referral.entity';
+import { ReferralReward } from '../rewards/entities/referral-reward.entity';
+import { ReferralStatus } from '../referrals/enums/referral-status.enum';
+import { RewardStatus } from '../rewards/enums/reward-status.enum';
 
 @Injectable()
 export class AdminService {
@@ -47,9 +60,16 @@ export class AdminService {
     private readonly bankAccountsRepository: Repository<BankAccount>,
     @InjectRepository(FxRate)
     private readonly fxRatesRepository: Repository<FxRate>,
+    @InjectRepository(Referral)
+    private readonly referralsRepository: Repository<Referral>,
+    @InjectRepository(ReferralReward)
+    private readonly referralRewardsRepository: Repository<ReferralReward>,
     private readonly usersService: UsersService,
     private readonly transactionsService: TransactionsService,
     private readonly mobileMoneyService: MobileMoneyService,
+    private readonly referralsService: ReferralsService,
+    private readonly rewardsService: RewardsService,
+    private readonly auditService: AuditService,
   ) {}
 
   async getSummary() {
@@ -61,6 +81,11 @@ export class AdminService {
       pendingMobileMoney,
       completedMobileMoney,
       failedMobileMoney,
+      totalReferrals,
+      activeReferrals,
+      fraudFlaggedReferrals,
+      pendingRewards,
+      creditedRewardsRaw,
       recentTransactions,
       recentReversals,
       recentWalletActivity,
@@ -82,6 +107,25 @@ export class AdminService {
       this.mobileMoneyRepository.count({
         where: { status: MobileMoneyStatus.FAILED },
       }),
+      this.referralsRepository.count(),
+      this.referralsRepository.count({
+        where: [
+          { status: ReferralStatus.ACTIVE },
+          { status: ReferralStatus.REWARD_PENDING },
+          { status: ReferralStatus.REWARDED },
+        ],
+      }),
+      this.referralsRepository.count({
+        where: { fraudFlag: true },
+      }),
+      this.referralRewardsRepository.count({
+        where: { status: RewardStatus.PENDING },
+      }),
+      this.referralRewardsRepository
+        .createQueryBuilder('reward')
+        .select('COALESCE(SUM(reward."amountCDF"), 0)', 'sum')
+        .where('reward.status = :status', { status: RewardStatus.CREDITED })
+        .getRawOne<{ sum: string }>(),
       this.transactionsRepository.find({
         order: { createdAt: 'DESC' },
         take: 8,
@@ -111,6 +155,11 @@ export class AdminService {
         pendingMobileMoney,
         completedMobileMoney,
         failedMobileMoney,
+        totalReferrals,
+        activeReferrals,
+        fraudFlaggedReferrals,
+        pendingRewards,
+        creditedRewardsTotalCDF: creditedRewardsRaw?.sum ?? '0',
       },
       fxSnapshot,
       recentTransactions,
@@ -162,6 +211,59 @@ export class AdminService {
     const user = await this.getUserDetail(id);
     user.isActive = isActive;
     return this.usersRepository.save(user);
+  }
+
+  async updateUserProfile(
+    id: string,
+    body: UpdateAdminUserProfileDto,
+    adminUserId: string,
+  ) {
+    const user = await this.getUserDetail(id);
+    const before = {
+      fullName: user.fullName,
+      email: user.email,
+      isActive: user.isActive,
+    };
+    const updatedUser = await this.usersService.updateProfile(id, body);
+
+    await this.auditService.logAdminAction({
+      adminUserId,
+      actionType: 'admin.user.profile.update',
+      targetEntity: 'user',
+      targetEntityId: id,
+      beforeJson: before,
+      afterJson: {
+        fullName: updatedUser.fullName,
+        email: updatedUser.email,
+        isActive: updatedUser.isActive,
+      },
+    });
+
+    return updatedUser;
+  }
+
+  async generatePasswordResetLink(id: string, adminUserId: string) {
+    const user = await this.getUserDetail(id);
+    const token = randomUUID();
+    const expiresAt = new Date(Date.now() + 1000 * 60 * 60);
+    await this.usersService.setPasswordResetToken(id, token, expiresAt);
+
+    const resetLink = `http://localhost:3001/reset-password?token=${token}`;
+
+    await this.auditService.logAdminAction({
+      adminUserId,
+      actionType: 'admin.user.password_reset_link.generate',
+      targetEntity: 'user',
+      targetEntityId: id,
+      metadataJson: { expiresAt: expiresAt.toISOString() },
+    });
+
+    return {
+      userId: user.id,
+      email: user.email,
+      resetLink,
+      expiresAt,
+    };
   }
 
   async getUserWallet(userId: string) {
@@ -451,6 +553,98 @@ export class AdminService {
     }
 
     return this.paginate(qb, query);
+  }
+
+  async listReferrals(query: AdminReferralsQueryDto) {
+    return this.referralsService.listAdminReferrals(query);
+  }
+
+  async getReferralAnalytics(userId: string) {
+    return this.referralsService.getUserReferralAnalytics(userId);
+  }
+
+  async rejectReferral(id: string, reason: string | undefined, adminUserId: string) {
+    const referral = await this.referralsService.rejectReferral(id, reason);
+    await this.auditService.logAdminAction({
+      adminUserId,
+      actionType: 'admin.referral.reject',
+      targetEntity: 'referral',
+      targetEntityId: id,
+      metadataJson: { reason: reason ?? null },
+    });
+    return referral;
+  }
+
+  async flagReferralFraud(id: string, reason: string | undefined, adminUserId: string) {
+    const referral = await this.referralsService.flagReferralFraud(id, reason);
+    await this.auditService.logAdminAction({
+      adminUserId,
+      actionType: 'admin.referral.flag_fraud',
+      targetEntity: 'referral',
+      targetEntityId: id,
+      metadataJson: { reason: reason ?? null },
+    });
+    return referral;
+  }
+
+  async listRewardRules() {
+    return this.rewardsService.listRewardRules();
+  }
+
+  async createRewardRule(body: CreateRewardRuleDto, adminUserId: string) {
+    const rewardRule = await this.rewardsService.createRewardRule(body, adminUserId);
+    await this.auditService.logAdminAction({
+      adminUserId,
+      actionType: 'admin.reward_rule.create',
+      targetEntity: 'reward_rule',
+      targetEntityId: rewardRule.id,
+      afterJson: rewardRule as unknown as Record<string, unknown>,
+    });
+    return rewardRule;
+  }
+
+  async updateRewardRule(id: string, body: UpdateRewardRuleDto, adminUserId: string) {
+    const rewardRule = await this.rewardsService.updateRewardRule(id, body, adminUserId);
+    await this.auditService.logAdminAction({
+      adminUserId,
+      actionType: 'admin.reward_rule.update',
+      targetEntity: 'reward_rule',
+      targetEntityId: id,
+      afterJson: rewardRule as unknown as Record<string, unknown>,
+    });
+    return rewardRule;
+  }
+
+  async listRewards(query: AdminRewardsQueryDto) {
+    return this.rewardsService.listAdminRewards(query);
+  }
+
+  async getReward(id: string) {
+    return this.rewardsService.getRewardById(id);
+  }
+
+  async approveReward(id: string, reason: string | undefined, adminUserId: string) {
+    const reward = await this.rewardsService.approveReward(id, adminUserId, reason);
+    await this.auditService.logAdminAction({
+      adminUserId,
+      actionType: 'admin.reward.approve',
+      targetEntity: 'reward',
+      targetEntityId: id,
+      metadataJson: { reason: reason ?? null },
+    });
+    return reward;
+  }
+
+  async rejectReward(id: string, reason: string | undefined, adminUserId: string) {
+    const reward = await this.rewardsService.rejectReward(id, adminUserId, reason);
+    await this.auditService.logAdminAction({
+      adminUserId,
+      actionType: 'admin.reward.reject',
+      targetEntity: 'reward',
+      targetEntityId: id,
+      metadataJson: { reason: reason ?? null },
+    });
+    return reward;
   }
 
   private applyDateRange<T extends ObjectLiteral>(

@@ -1,11 +1,11 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
-import { Translate } from '@google-cloud/translate/build/src/v2';
+import { v2 } from '@google-cloud/translate';
 import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class TranslationService {
-  private translate: Translate;
-  
+  private translate: v2.Translate;
+
   // Supported languages based on user request:
   // French (fr), English (en), Lingala (ln), Swahili (sw), Tshiluba (lua), Kikongo (kg)
   private readonly supportedLanguages = ['fr', 'en', 'ln', 'sw', 'lua', 'kg'];
@@ -16,13 +16,13 @@ export class TranslationService {
 
     // Google Cloud requires project configuration
     if (projectId || keyFilename) {
-      this.translate = new Translate({
+      this.translate = new v2.Translate({
         projectId,
         keyFilename,
       });
     } else {
       // Fallback to default credentials if not specified
-      this.translate = new Translate();
+      this.translate = new v2.Translate();
     }
   }
 
@@ -39,8 +39,10 @@ export class TranslationService {
 
       const [translation] = await this.translate.translate(text, targetLanguage);
       return translation;
-    } catch (error) {
-      throw new InternalServerErrorException(`Translation failed: ${error.message}`);
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : 'Unknown translation error';
+      throw new InternalServerErrorException(`Translation failed: ${message}`);
     }
   }
 

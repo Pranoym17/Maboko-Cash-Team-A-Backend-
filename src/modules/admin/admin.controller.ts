@@ -6,6 +6,7 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { AdminService } from './admin.service';
@@ -22,6 +23,13 @@ import { AdminLedgerQueryDto } from './dto/admin-ledger-query.dto';
 import { AdminBankQueryDto } from './dto/admin-bank-query.dto';
 import { AdminListQueryDto } from './dto/admin-list-query.dto';
 import { AdminMobileMoneyDecisionDto } from './dto/admin-mobile-money-decision.dto';
+import { UpdateAdminUserProfileDto } from './dto/update-admin-user-profile.dto';
+import { AdminReferralsQueryDto } from './dto/admin-referrals-query.dto';
+import { AdminRewardsQueryDto } from './dto/admin-rewards-query.dto';
+import { UpdateReferralStatusDto } from './dto/update-referral-status.dto';
+import { UpdateRewardStatusDto } from '../rewards/dto/update-reward-status.dto';
+import { CreateRewardRuleDto } from '../rewards/dto/create-reward-rule.dto';
+import { UpdateRewardRuleDto } from '../rewards/dto/update-reward-rule.dto';
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -42,6 +50,20 @@ export class AdminController {
   @Get('users/:id')
   getUserDetail(@Param('id') id: string) {
     return this.adminService.getUserDetail(id);
+  }
+
+  @Patch('users/:id/profile')
+  updateUserProfile(
+    @Param('id') id: string,
+    @Body() body: UpdateAdminUserProfileDto,
+    @Req() req: any,
+  ) {
+    return this.adminService.updateUserProfile(id, body, req.user.sub);
+  }
+
+  @Post('users/:id/password-reset-link')
+  generatePasswordResetLink(@Param('id') id: string, @Req() req: any) {
+    return this.adminService.generatePasswordResetLink(id, req.user.sub);
   }
 
   @Patch('users/:id/status')
@@ -161,5 +183,80 @@ export class AdminController {
   @Get('bank-accounts')
   listBankAccounts(@Query() query: AdminListQueryDto) {
     return this.adminService.listBankAccounts(query);
+  }
+
+  @Get('referrals')
+  listReferrals(@Query() query: AdminReferralsQueryDto) {
+    return this.adminService.listReferrals(query);
+  }
+
+  @Get('referrals/:userId')
+  getReferralAnalytics(@Param('userId') userId: string) {
+    return this.adminService.getReferralAnalytics(userId);
+  }
+
+  @Patch('referrals/:id/reject')
+  rejectReferral(
+    @Param('id') id: string,
+    @Body() body: UpdateReferralStatusDto,
+    @Req() req: any,
+  ) {
+    return this.adminService.rejectReferral(id, body.reason, req.user.sub);
+  }
+
+  @Patch('referrals/:id/flag-fraud')
+  flagReferralFraud(
+    @Param('id') id: string,
+    @Body() body: UpdateReferralStatusDto,
+    @Req() req: any,
+  ) {
+    return this.adminService.flagReferralFraud(id, body.reason, req.user.sub);
+  }
+
+  @Get('reward-rules')
+  listRewardRules() {
+    return this.adminService.listRewardRules();
+  }
+
+  @Post('reward-rules')
+  createRewardRule(@Body() body: CreateRewardRuleDto, @Req() req: any) {
+    return this.adminService.createRewardRule(body, req.user.sub);
+  }
+
+  @Patch('reward-rules/:id')
+  updateRewardRule(
+    @Param('id') id: string,
+    @Body() body: UpdateRewardRuleDto,
+    @Req() req: any,
+  ) {
+    return this.adminService.updateRewardRule(id, body, req.user.sub);
+  }
+
+  @Get('rewards')
+  listRewards(@Query() query: AdminRewardsQueryDto) {
+    return this.adminService.listRewards(query);
+  }
+
+  @Get('rewards/:id')
+  getReward(@Param('id') id: string) {
+    return this.adminService.getReward(id);
+  }
+
+  @Patch('rewards/:id/approve')
+  approveReward(
+    @Param('id') id: string,
+    @Body() body: UpdateRewardStatusDto,
+    @Req() req: any,
+  ) {
+    return this.adminService.approveReward(id, body.reason, req.user.sub);
+  }
+
+  @Patch('rewards/:id/reject')
+  rejectReward(
+    @Param('id') id: string,
+    @Body() body: UpdateRewardStatusDto,
+    @Req() req: any,
+  ) {
+    return this.adminService.rejectReward(id, body.reason, req.user.sub);
   }
 }

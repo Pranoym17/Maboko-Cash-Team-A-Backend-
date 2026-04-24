@@ -27,4 +27,9 @@ export class RegisterDto {
   @IsString()
   @IsNotEmpty()
   adminPasscode?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  referralCode?: string;
 }

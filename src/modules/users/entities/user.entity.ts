@@ -36,6 +36,18 @@ export class User {
   @Column({ type: 'text', nullable: true })
   qrCode: string;
 
+  @Column({ unique: true, nullable: true })
+  referralCode: string | null;
+
+  @Column({ nullable: true })
+  referredByUserId: string | null;
+
+  @Column({ nullable: true })
+  passwordResetToken: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  passwordResetExpiresAt: Date | null;
+
   @OneToOne(() => Wallet, (wallet) => wallet.user)
   wallet: Wallet;
 

@@ -8,7 +8,9 @@ export const getDatabaseConfig = (configService: ConfigService) => ({
   password: configService.get<string>('DB_PASSWORD'),
   database: configService.get<string>('DB_NAME'),
   autoLoadEntities: true,
-  synchronize: true,
+  synchronize: configService.get<string>('DB_SYNCHRONIZE') === 'true',
+  migrationsRun: configService.get<string>('DB_MIGRATIONS_RUN') !== 'false',
+  migrations: [__dirname + '/../database/migrations/*{.ts,.js}'],
   ...(configService.get<string>('DB_SSL') === 'true' && {
     ssl: { rejectUnauthorized: false },
   }),

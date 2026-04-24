@@ -7,6 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import QRCode from 'qrcode';
+import { randomUUID } from 'crypto';
 import { Role } from '../../common/enums/role.enum';
 import { User } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -37,6 +38,7 @@ export class UsersService {
       email: createUserDto.email,
       passwordHash,
       role: createUserDto.role === 'admin' ? Role.ADMIN : Role.USER,
+      referralCode: await this.generateUniqueReferralCode(),
     });
 
     const savedUser = await this.usersRepository.save(user);
@@ -77,6 +79,75 @@ export class UsersService {
     return user;
   }
 
+  async findByReferralCode(referralCode: string): Promise<User | null> {
+    return this.usersRepository.findOne({
+      where: { referralCode },
+      relations: ['wallet'],
+    });
+  }
+
+  async ensureReferralCode(userId: string): Promise<User> {
+    const user = await this.findById(userId);
+
+    if (user.referralCode) {
+      return user;
+    }
+
+    user.referralCode = await this.generateUniqueReferralCode();
+    return this.usersRepository.save(user);
+  }
+
+  async updateProfile(
+    userId: string,
+    updates: Partial<Pick<User, 'fullName' | 'email' | 'isActive'>>,
+  ): Promise<User> {
+    const user = await this.findById(userId);
+
+    if (updates.email && updates.email !== user.email) {
+      const existingUser = await this.usersRepository.findOne({
+        where: { email: updates.email },
+      });
+
+      if (existingUser && existingUser.id !== user.id) {
+        throw new ConflictException('Email already registered');
+      }
+    }
+
+    Object.assign(user, updates);
+    return this.usersRepository.save(user);
+  }
+
+  async setPasswordResetToken(userId: string, token: string, expiresAt: Date) {
+    const user = await this.findById(userId);
+    user.passwordResetToken = token;
+    user.passwordResetExpiresAt = expiresAt;
+    return this.usersRepository.save(user);
+  }
+
+  async findByPasswordResetToken(token: string): Promise<User | null> {
+    return this.usersRepository.findOne({
+      where: { passwordResetToken: token },
+      relations: ['wallet'],
+    });
+  }
+
+  async resetPasswordByToken(token: string, newPassword: string): Promise<User> {
+    const user = await this.findByPasswordResetToken(token);
+
+    if (!user || !user.passwordResetExpiresAt) {
+      throw new NotFoundException('Invalid password reset token');
+    }
+
+    if (user.passwordResetExpiresAt.getTime() < Date.now()) {
+      throw new ConflictException('Password reset token has expired');
+    }
+
+    user.passwordHash = await bcrypt.hash(newPassword, 10);
+    user.passwordResetToken = null;
+    user.passwordResetExpiresAt = null;
+    return this.usersRepository.save(user);
+  }
+
   private async generateQRCode(userId: string): Promise<string> {
     try {
       const qrCodeDataUrl = await QRCode.toDataURL(userId);
@@ -107,5 +178,20 @@ export class UsersService {
     }
 
     return user;
+  }
+
+  private async generateUniqueReferralCode(): Promise<string> {
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const referralCode = randomUUID().replace(/-/g, '').slice(0, 10).toUpperCase();
+      const existingUser = await this.usersRepository.findOne({
+        where: { referralCode },
+      });
+
+      if (!existingUser) {
+        return referralCode;
+      }
+    }
+
+    throw new ConflictException('Unable to generate unique referral code');
   }
 }

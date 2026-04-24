@@ -15,6 +15,7 @@ import { WalletTransaction } from '../wallets/entities/wallet-transaction.entity
 import { WalletTransactionStatus } from '../wallets/enums/wallet-transaction-status.enum';
 import { WalletTransactionType } from '../wallets/enums/wallet-transaction-type.enum';
 import { TransactionStatus } from './enums/transaction-status.enum';
+import { ReferralsService } from '../referrals/referrals.service';
 
 @Injectable()
 export class TransactionsService {
@@ -23,6 +24,7 @@ export class TransactionsService {
     private readonly transactionsRepository: Repository<Transaction>,
     @InjectDataSource()
     private readonly dataSource: DataSource,
+    private readonly referralsService: ReferralsService,
   ) {}
 
   async createPeerToPeerTransfer(
@@ -147,6 +149,10 @@ export class TransactionsService {
 
         savedTransaction.status = TransactionStatus.COMPLETED;
         await txRepo.save(savedTransaction);
+
+        await this.referralsService.markReferralActiveByTransaction(
+          receiverUserId,
+        );
 
         return {
           message: 'Transfer successful',

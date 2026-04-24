@@ -13,6 +13,9 @@ import { MobileMoneyModule } from './modules/mobile-money/mobile-money.module';
 import { BankTransfersModule } from './modules/bank-transfers/bank-transfers.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { TranslationModule } from './modules/translation/translation.module';
+import { ReferralsModule } from './modules/referrals/referrals.module';
+import { RewardsModule } from './modules/rewards/rewards.module';
+import { AuditModule } from './modules/audit/audit.module';
 
 @Module({
   imports: [
@@ -36,6 +39,9 @@ import { TranslationModule } from './modules/translation/translation.module';
     BankTransfersModule,
     AdminModule,
     TranslationModule,
+    ReferralsModule,
+    RewardsModule,
+    AuditModule,
   ],
 })
 export class AppModule {}

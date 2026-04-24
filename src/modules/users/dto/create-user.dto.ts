@@ -22,4 +22,9 @@ export class CreateUserDto {
   @IsOptional()
   @IsIn(['user', 'admin'])
   role?: 'user' | 'admin';
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  referralCode?: string;
 }

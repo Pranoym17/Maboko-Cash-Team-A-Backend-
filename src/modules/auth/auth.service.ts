@@ -1,6 +1,8 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -10,6 +12,8 @@ import { Role } from '../../common/enums/role.enum';
 import { UsersService } from '../users/users.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { ReferralsService } from '../referrals/referrals.service';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 @Injectable()
 export class AuthService {
@@ -17,6 +21,7 @@ export class AuthService {
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly referralsService: ReferralsService,
   ) {}
 
   async register(registerDto: RegisterDto) {
@@ -35,7 +40,24 @@ export class AuthService {
       }
     }
 
+    if (registerDto.referralCode) {
+      const referrer = await this.usersService.findByReferralCode(
+        registerDto.referralCode.trim().toUpperCase(),
+      );
+
+      if (!referrer) {
+        throw new ForbiddenException('Invalid referral code');
+      }
+    }
+
     const user = await this.usersService.create(registerDto);
+
+    if (registerDto.referralCode) {
+      await this.referralsService.registerReferralForNewUser(
+        user.id,
+        registerDto.referralCode,
+      );
+    }
 
     return {
       message:
@@ -81,6 +103,36 @@ export class AuthService {
         fullName: user.fullName,
         role: user.role,
       },
+    };
+  }
+
+  async validatePasswordResetToken(token: string) {
+    const user = await this.usersService.findByPasswordResetToken(token);
+
+    if (!user || !user.passwordResetExpiresAt) {
+      throw new NotFoundException('Invalid password reset token');
+    }
+
+    if (user.passwordResetExpiresAt.getTime() < Date.now()) {
+      throw new BadRequestException('Password reset token has expired');
+    }
+
+    return {
+      valid: true,
+      email: user.email,
+      expiresAt: user.passwordResetExpiresAt,
+    };
+  }
+
+  async resetPassword(resetPasswordDto: ResetPasswordDto) {
+    await this.validatePasswordResetToken(resetPasswordDto.token);
+    await this.usersService.resetPasswordByToken(
+      resetPasswordDto.token,
+      resetPasswordDto.newPassword,
+    );
+
+    return {
+      message: 'Password reset successful',
     };
   }
 }
