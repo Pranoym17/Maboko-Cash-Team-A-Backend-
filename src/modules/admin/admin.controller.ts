@@ -30,6 +30,14 @@ import { UpdateReferralStatusDto } from './dto/update-referral-status.dto';
 import { UpdateRewardStatusDto } from '../rewards/dto/update-reward-status.dto';
 import { CreateRewardRuleDto } from '../rewards/dto/create-reward-rule.dto';
 import { UpdateRewardRuleDto } from '../rewards/dto/update-reward-rule.dto';
+import { AdminMarketplaceQueryDto } from './dto/admin-marketplace-query.dto';
+import { CreateMarketplaceProviderDto } from '../marketplace/dto/create-marketplace-provider.dto';
+import { UpdateMarketplaceProviderDto } from '../marketplace/dto/update-marketplace-provider.dto';
+import { MarketplaceProviderStatus } from '../marketplace/enums/marketplace-provider-status.enum';
+import { AdminSupportQueryDto } from './dto/admin-support-query.dto';
+import { UpdateSupportAssignmentDto } from '../support/dto/update-support-assignment.dto';
+import { UpdateSupportStatusDto } from '../support/dto/update-support-status.dto';
+import { CreateSupportMessageDto } from '../support/dto/create-support-message.dto';
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -258,5 +266,92 @@ export class AdminController {
     @Req() req: any,
   ) {
     return this.adminService.rejectReward(id, body.reason, req.user.sub);
+  }
+
+  @Get('marketplace/providers')
+  listMarketplaceProviders(@Query() query: AdminMarketplaceQueryDto) {
+    return this.adminService.listMarketplaceProviders(query);
+  }
+
+  @Get('marketplace/categories')
+  listMarketplaceCategories() {
+    return this.adminService.listMarketplaceCategories();
+  }
+
+  @Post('marketplace/providers')
+  createMarketplaceProvider(@Body() body: CreateMarketplaceProviderDto, @Req() req: any) {
+    return this.adminService.createMarketplaceProvider(body, req.user.sub);
+  }
+
+  @Patch('marketplace/providers/:id')
+  updateMarketplaceProvider(
+    @Param('id') id: string,
+    @Body() body: UpdateMarketplaceProviderDto,
+    @Req() req: any,
+  ) {
+    return this.adminService.updateMarketplaceProvider(id, body, req.user.sub);
+  }
+
+  @Patch('marketplace/providers/:id/visibility')
+  updateMarketplaceProviderVisibility(
+    @Param('id') id: string,
+    @Body() body: { isVisible: boolean },
+    @Req() req: any,
+  ) {
+    return this.adminService.updateMarketplaceProviderVisibility(
+      id,
+      body.isVisible,
+      req.user.sub,
+    );
+  }
+
+  @Patch('marketplace/providers/:id/status')
+  updateMarketplaceProviderStatus(
+    @Param('id') id: string,
+    @Body() body: { status: MarketplaceProviderStatus },
+    @Req() req: any,
+  ) {
+    return this.adminService.updateMarketplaceProviderStatus(
+      id,
+      body.status,
+      req.user.sub,
+    );
+  }
+
+  @Get('support/conversations')
+  listSupportConversations(@Query() query: AdminSupportQueryDto) {
+    return this.adminService.listSupportConversations(query);
+  }
+
+  @Get('support/conversations/:id')
+  getSupportConversation(@Param('id') id: string) {
+    return this.adminService.getSupportConversation(id);
+  }
+
+  @Patch('support/conversations/:id/assign')
+  assignSupportConversation(
+    @Param('id') id: string,
+    @Body() body: UpdateSupportAssignmentDto,
+    @Req() req: any,
+  ) {
+    return this.adminService.assignSupportConversation(id, body, req.user.sub);
+  }
+
+  @Patch('support/conversations/:id/status')
+  updateSupportConversationStatus(
+    @Param('id') id: string,
+    @Body() body: UpdateSupportStatusDto,
+    @Req() req: any,
+  ) {
+    return this.adminService.updateSupportConversationStatus(id, body, req.user.sub);
+  }
+
+  @Post('support/conversations/:id/messages')
+  addSupportConversationMessage(
+    @Param('id') id: string,
+    @Body() body: CreateSupportMessageDto,
+    @Req() req: any,
+  ) {
+    return this.adminService.addSupportConversationMessage(id, body, req.user.sub);
   }
 }

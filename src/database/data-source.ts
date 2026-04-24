@@ -13,6 +13,10 @@ import { Referral } from '../modules/referrals/entities/referral.entity';
 import { RewardRule } from '../modules/rewards/entities/reward-rule.entity';
 import { ReferralReward } from '../modules/rewards/entities/referral-reward.entity';
 import { AdminAuditLog } from '../modules/audit/entities/admin-audit-log.entity';
+import { MarketplaceCategory } from '../modules/marketplace/entities/marketplace-category.entity';
+import { MarketplaceProvider } from '../modules/marketplace/entities/marketplace-provider.entity';
+import { SupportConversation } from '../modules/support/entities/support-conversation.entity';
+import { SupportMessage } from '../modules/support/entities/support-message.entity';
 
 export default new DataSource({
   type: 'postgres',
@@ -37,6 +41,10 @@ export default new DataSource({
     RewardRule,
     ReferralReward,
     AdminAuditLog,
+    MarketplaceCategory,
+    MarketplaceProvider,
+    SupportConversation,
+    SupportMessage,
   ],
   migrations: [__dirname + '/migrations/*{.ts,.js}'],
   ...(process.env.DB_SSL === 'true' && {

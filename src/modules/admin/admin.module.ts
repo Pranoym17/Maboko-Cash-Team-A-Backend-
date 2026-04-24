@@ -20,6 +20,12 @@ import { ReferralReward } from '../rewards/entities/referral-reward.entity';
 import { ReferralsModule } from '../referrals/referrals.module';
 import { RewardsModule } from '../rewards/rewards.module';
 import { AuditModule } from '../audit/audit.module';
+import { MarketplaceCategory } from '../marketplace/entities/marketplace-category.entity';
+import { MarketplaceProvider } from '../marketplace/entities/marketplace-provider.entity';
+import { SupportConversation } from '../support/entities/support-conversation.entity';
+import { SupportMessage } from '../support/entities/support-message.entity';
+import { MarketplaceModule } from '../marketplace/marketplace.module';
+import { SupportModule } from '../support/support.module';
 
 @Module({
   imports: [
@@ -36,6 +42,10 @@ import { AuditModule } from '../audit/audit.module';
       Referral,
       RewardRule,
       ReferralReward,
+      MarketplaceCategory,
+      MarketplaceProvider,
+      SupportConversation,
+      SupportMessage,
     ]),
     UsersModule,
     TransactionsModule,
@@ -43,6 +53,8 @@ import { AuditModule } from '../audit/audit.module';
     ReferralsModule,
     RewardsModule,
     AuditModule,
+    MarketplaceModule,
+    SupportModule,
   ],
   controllers: [AdminController],
   providers: [AdminService],

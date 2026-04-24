@@ -16,6 +16,8 @@ import { TranslationModule } from './modules/translation/translation.module';
 import { ReferralsModule } from './modules/referrals/referrals.module';
 import { RewardsModule } from './modules/rewards/rewards.module';
 import { AuditModule } from './modules/audit/audit.module';
+import { MarketplaceModule } from './modules/marketplace/marketplace.module';
+import { SupportModule } from './modules/support/support.module';
 
 @Module({
   imports: [
@@ -42,6 +44,8 @@ import { AuditModule } from './modules/audit/audit.module';
     ReferralsModule,
     RewardsModule,
     AuditModule,
+    MarketplaceModule,
+    SupportModule,
   ],
 })
 export class AppModule {}

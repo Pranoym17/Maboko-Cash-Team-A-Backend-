@@ -38,6 +38,16 @@ import { Referral } from '../referrals/entities/referral.entity';
 import { ReferralReward } from '../rewards/entities/referral-reward.entity';
 import { ReferralStatus } from '../referrals/enums/referral-status.enum';
 import { RewardStatus } from '../rewards/enums/reward-status.enum';
+import { MarketplaceService } from '../marketplace/marketplace.service';
+import { SupportService } from '../support/support.service';
+import { AdminMarketplaceQueryDto } from './dto/admin-marketplace-query.dto';
+import { CreateMarketplaceProviderDto } from '../marketplace/dto/create-marketplace-provider.dto';
+import { UpdateMarketplaceProviderDto } from '../marketplace/dto/update-marketplace-provider.dto';
+import { MarketplaceProviderStatus } from '../marketplace/enums/marketplace-provider-status.enum';
+import { AdminSupportQueryDto } from './dto/admin-support-query.dto';
+import { UpdateSupportAssignmentDto } from '../support/dto/update-support-assignment.dto';
+import { UpdateSupportStatusDto } from '../support/dto/update-support-status.dto';
+import { CreateSupportMessageDto } from '../support/dto/create-support-message.dto';
 
 @Injectable()
 export class AdminService {
@@ -70,6 +80,8 @@ export class AdminService {
     private readonly referralsService: ReferralsService,
     private readonly rewardsService: RewardsService,
     private readonly auditService: AuditService,
+    private readonly marketplaceService: MarketplaceService,
+    private readonly supportService: SupportService,
   ) {}
 
   async getSummary() {
@@ -645,6 +657,149 @@ export class AdminService {
       metadataJson: { reason: reason ?? null },
     });
     return reward;
+  }
+
+  async listMarketplaceProviders(query: AdminMarketplaceQueryDto) {
+    return this.marketplaceService.listAdminProviders(query);
+  }
+
+  async listMarketplaceCategories() {
+    return this.marketplaceService.listAdminCategories();
+  }
+
+  async createMarketplaceProvider(
+    body: CreateMarketplaceProviderDto,
+    adminUserId: string,
+  ) {
+    const provider = await this.marketplaceService.createProvider(body);
+    await this.auditService.logAdminAction({
+      adminUserId,
+      actionType: 'admin.marketplace.provider.create',
+      targetEntity: 'marketplace_provider',
+      targetEntityId: provider.id,
+      afterJson: provider as unknown as Record<string, unknown>,
+    });
+    return provider;
+  }
+
+  async updateMarketplaceProvider(
+    id: string,
+    body: UpdateMarketplaceProviderDto,
+    adminUserId: string,
+  ) {
+    const provider = await this.marketplaceService.updateProvider(id, body);
+    await this.auditService.logAdminAction({
+      adminUserId,
+      actionType: 'admin.marketplace.provider.update',
+      targetEntity: 'marketplace_provider',
+      targetEntityId: id,
+      afterJson: provider as unknown as Record<string, unknown>,
+    });
+    return provider;
+  }
+
+  async updateMarketplaceProviderVisibility(
+    id: string,
+    isVisible: boolean,
+    adminUserId: string,
+  ) {
+    const provider = await this.marketplaceService.updateProviderVisibility(
+      id,
+      isVisible,
+    );
+    await this.auditService.logAdminAction({
+      adminUserId,
+      actionType: 'admin.marketplace.provider.visibility',
+      targetEntity: 'marketplace_provider',
+      targetEntityId: id,
+      metadataJson: { isVisible },
+    });
+    return provider;
+  }
+
+  async updateMarketplaceProviderStatus(
+    id: string,
+    status: MarketplaceProviderStatus,
+    adminUserId: string,
+  ) {
+    const provider = await this.marketplaceService.updateProviderStatus(id, status);
+    await this.auditService.logAdminAction({
+      adminUserId,
+      actionType: 'admin.marketplace.provider.status',
+      targetEntity: 'marketplace_provider',
+      targetEntityId: id,
+      metadataJson: { status },
+    });
+    return provider;
+  }
+
+  async listSupportConversations(query: AdminSupportQueryDto) {
+    return this.supportService.listAdminConversations(query);
+  }
+
+  async getSupportConversation(id: string) {
+    return this.supportService.getConversationForAdmin(id);
+  }
+
+  async assignSupportConversation(
+    id: string,
+    body: UpdateSupportAssignmentDto,
+    adminUserId: string,
+  ) {
+    const conversation = await this.supportService.assignConversation(
+      id,
+      body,
+      adminUserId,
+    );
+    await this.auditService.logAdminAction({
+      adminUserId,
+      actionType: 'admin.support.assign',
+      targetEntity: 'support_conversation',
+      targetEntityId: id,
+      metadataJson: { assignedAdminId: conversation.assignedAdminId },
+    });
+    return conversation;
+  }
+
+  async updateSupportConversationStatus(
+    id: string,
+    body: UpdateSupportStatusDto,
+    adminUserId: string,
+  ) {
+    const conversation = await this.supportService.updateConversationStatus(
+      id,
+      body,
+      adminUserId,
+    );
+    await this.auditService.logAdminAction({
+      adminUserId,
+      actionType: 'admin.support.status',
+      targetEntity: 'support_conversation',
+      targetEntityId: id,
+      metadataJson: { status: body.status, note: body.note ?? null },
+    });
+    return conversation;
+  }
+
+  async addSupportConversationMessage(
+    id: string,
+    body: CreateSupportMessageDto,
+    adminUserId: string,
+  ) {
+    const conversation = await this.supportService.addMessageForAdmin(
+      adminUserId,
+      id,
+      body,
+    );
+    await this.auditService.logAdminAction({
+      adminUserId,
+      actionType: body.isInternalNote
+        ? 'admin.support.internal_note'
+        : 'admin.support.reply',
+      targetEntity: 'support_conversation',
+      targetEntityId: id,
+    });
+    return conversation;
   }
 
   private applyDateRange<T extends ObjectLiteral>(
