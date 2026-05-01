@@ -343,6 +343,15 @@ export class MarketplaceService {
     return this.serializeProvider(hydratedProvider!);
   }
 
+  async deleteProvider(id: string) {
+    const provider = await this.providersRepository.findOne({ where: { id } });
+    if (!provider) {
+      throw new NotFoundException('Marketplace provider not found');
+    }
+    await this.providersRepository.remove(provider);
+    return { success: true };
+  }
+
   private async paginate(
     qb: SelectQueryBuilder<MarketplaceProvider>,
     page: number,

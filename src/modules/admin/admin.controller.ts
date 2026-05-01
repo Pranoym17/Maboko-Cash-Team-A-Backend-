@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -316,6 +317,11 @@ export class AdminController {
       body.status,
       req.user.sub,
     );
+  }
+
+  @Delete('marketplace/providers/:id')
+  deleteMarketplaceProvider(@Param('id') id: string, @Req() req: any) {
+    return this.adminService.deleteMarketplaceProvider(id, req.user.sub);
   }
 
   @Get('support/conversations')

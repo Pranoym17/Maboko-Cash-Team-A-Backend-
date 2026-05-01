@@ -738,6 +738,17 @@ export class AdminService {
     return provider;
   }
 
+  async deleteMarketplaceProvider(id: string, adminUserId: string) {
+    const result = await this.marketplaceService.deleteProvider(id);
+    await this.auditService.logAdminAction({
+      adminUserId,
+      actionType: 'admin.marketplace.provider.delete',
+      targetEntity: 'marketplace_provider',
+      targetEntityId: id,
+    });
+    return result;
+  }
+
   async listSupportConversations(query: AdminSupportQueryDto) {
     return this.supportService.listAdminConversations(query);
   }
