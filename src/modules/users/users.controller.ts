@@ -1,13 +1,17 @@
 import {
+  ForbiddenException,
   Controller,
   Get,
   Post,
   Param,
   Body,
+  Req,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { ScanQRCodeDto } from './dto/scan-qrcode.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 type QRCodeResponse = {
   userId: string;
@@ -25,6 +29,7 @@ type ScannedQRCodeUserResponse = {
 
 @ApiTags('Users')
 @Controller('users')
+@UseGuards(JwtAuthGuard)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
@@ -35,7 +40,14 @@ export class UsersController {
     description: 'QR code retrieved successfully',
   })
   @ApiResponse({ status: 404, description: 'User not found' })
-  async getQRCode(@Param('id') userId: string): Promise<QRCodeResponse> {
+  async getQRCode(@Param('id') userId: string, @Req() req: any): Promise<QRCodeResponse> {
+    const requesterId = req.user?.sub;
+    const requesterRole = String(req.user?.role ?? '').toLowerCase();
+
+    if (requesterId !== userId && requesterRole !== 'admin') {
+      throw new ForbiddenException('You can only access your own QR code');
+    }
+
     const qrCode = await this.usersService.getQRCode(userId);
     return {
       userId,

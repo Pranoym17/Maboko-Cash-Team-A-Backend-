@@ -63,14 +63,30 @@ export class SupportGateway implements OnGatewayConnection, OnGatewayDisconnect 
       user.role,
       body.conversationId,
     );
-    client.join(`conversation:${body.conversationId}`);
+
+    if (String(user.role).toLowerCase() === 'admin') {
+      client.join(`conversation:${body.conversationId}:admins`);
+    } else {
+      client.join(`conversation:${body.conversationId}:user:${user.sub}`);
+    }
+
     const unread = await this.supportService.getUnreadCount(user.sub, user.role);
     client.emit('support:unread', unread);
     return { ok: true };
   }
 
-  emitConversationUpdated(conversationId: string, payload: unknown) {
-    this.server.to(`conversation:${conversationId}`).emit('support:conversation:updated', payload);
+  emitConversationUpdated(
+    conversationId: string,
+    userId: string,
+    adminPayload: unknown,
+    userPayload: unknown,
+  ) {
+    this.server
+      .to(`conversation:${conversationId}:admins`)
+      .emit('support:conversation:updated', adminPayload);
+    this.server
+      .to(`conversation:${conversationId}:user:${userId}`)
+      .emit('support:conversation:updated', userPayload);
   }
 
   emitConversationCreated(payload: unknown, userId: string) {
@@ -80,10 +96,6 @@ export class SupportGateway implements OnGatewayConnection, OnGatewayDisconnect 
 
   async emitUnreadCount(userId: string, role: string) {
     const unread = await this.supportService.getUnreadCount(userId, role);
-    if (String(role).toLowerCase() === 'admin') {
-      this.server.to('admins').emit('support:unread', unread);
-      return;
-    }
     this.server.to(`user:${userId}`).emit('support:unread', unread);
   }
 }

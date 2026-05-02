@@ -753,8 +753,8 @@ export class AdminService {
     return this.supportService.listAdminConversations(query);
   }
 
-  async getSupportConversation(id: string) {
-    return this.supportService.getConversationForAdmin(id);
+  async getSupportConversation(id: string, adminUserId: string) {
+    return this.supportService.getConversationForAdmin(id, adminUserId);
   }
 
   async assignSupportConversation(

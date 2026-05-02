@@ -22,6 +22,8 @@ import { SupportConversationStatus } from './enums/support-conversation-status.e
 import { SupportPriority } from './enums/support-priority.enum';
 import { SupportGateway } from './support.gateway';
 import { SupportMessageRead } from './entities/support-message-read.entity';
+import { User } from '../users/entities/user.entity';
+import { Role } from '../../common/enums/role.enum';
 
 @Injectable()
 export class SupportService {
@@ -32,6 +34,8 @@ export class SupportService {
     private readonly messagesRepository: Repository<SupportMessage>,
     @InjectRepository(SupportMessageRead)
     private readonly readsRepository: Repository<SupportMessageRead>,
+    @InjectRepository(User)
+    private readonly usersRepository: Repository<User>,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     @Inject(forwardRef(() => SupportGateway))
@@ -66,7 +70,7 @@ export class SupportService {
     const fullConversation = await this.getConversationForUser(userId, conversation.id);
     this.supportGateway.emitConversationCreated(fullConversation, userId);
     await this.supportGateway.emitUnreadCount(userId, SupportSenderRole.USER);
-    await this.supportGateway.emitUnreadCount('admins', SupportSenderRole.ADMIN);
+    await this.emitUnreadCountsForAdmins();
     return fullConversation;
   }
 
@@ -130,9 +134,9 @@ export class SupportService {
     }
     await this.conversationsRepository.save(conversation);
     const fullConversation = await this.getConversationForUser(userId, conversationId);
-    this.supportGateway.emitConversationUpdated(conversationId, fullConversation);
+    await this.emitConversationUpdate(conversationId, conversation.userId);
     await this.supportGateway.emitUnreadCount(userId, SupportSenderRole.USER);
-    await this.supportGateway.emitUnreadCount('admins', SupportSenderRole.ADMIN);
+    await this.emitUnreadCountsForAdmins();
     return fullConversation;
   }
 
@@ -165,7 +169,7 @@ export class SupportService {
     return this.paginate(qb, query.page ?? 1, query.limit ?? 20);
   }
 
-  async getConversationForAdmin(conversationId: string) {
+  async getConversationForAdmin(conversationId: string, adminUserId?: string) {
     const conversation = await this.conversationsRepository.findOne({
       where: { id: conversationId },
       relations: { messages: true },
@@ -176,8 +180,11 @@ export class SupportService {
       throw new NotFoundException('Support conversation not found');
     }
 
-    await this.markConversationRead(conversationId, 'admins', SupportSenderRole.ADMIN);
-    await this.supportGateway.emitUnreadCount('admins', SupportSenderRole.ADMIN);
+    if (adminUserId) {
+      await this.markConversationRead(conversationId, adminUserId, SupportSenderRole.ADMIN);
+      await this.supportGateway.emitUnreadCount(adminUserId, SupportSenderRole.ADMIN);
+    }
+
     return conversation;
   }
 
@@ -194,7 +201,11 @@ export class SupportService {
       throw new NotFoundException('Support conversation not found');
     }
 
-    if (body.isInternalNote && conversation.assignedAdminId && conversation.assignedAdminId !== adminUserId) {
+    if (
+      body.isInternalNote &&
+      conversation.assignedAdminId &&
+      conversation.assignedAdminId !== adminUserId
+    ) {
       throw new ForbiddenException('Only the assigned admin can add internal notes');
     }
 
@@ -212,10 +223,10 @@ export class SupportService {
 
     conversation.lastMessageAt = new Date();
     await this.conversationsRepository.save(conversation);
-    const fullConversation = await this.getConversationForAdmin(conversationId);
-    this.supportGateway.emitConversationUpdated(conversationId, fullConversation);
+    const fullConversation = await this.getConversationForAdmin(conversationId, adminUserId);
+    await this.emitConversationUpdate(conversationId, conversation.userId);
     await this.supportGateway.emitUnreadCount(conversation.userId, SupportSenderRole.USER);
-    await this.supportGateway.emitUnreadCount('admins', SupportSenderRole.ADMIN);
+    await this.emitUnreadCountsForAdmins();
     return fullConversation;
   }
 
@@ -224,10 +235,10 @@ export class SupportService {
     body: UpdateSupportAssignmentDto,
     adminUserId: string,
   ) {
-    const conversation = await this.getConversationForAdmin(conversationId);
+    const conversation = await this.getConversationForAdmin(conversationId, adminUserId);
     conversation.assignedAdminId = body.assignedAdminId ?? adminUserId;
     const savedConversation = await this.conversationsRepository.save(conversation);
-    this.supportGateway.emitConversationUpdated(conversationId, savedConversation);
+    await this.emitConversationUpdate(conversationId, savedConversation.userId);
     return savedConversation;
   }
 
@@ -236,7 +247,7 @@ export class SupportService {
     body: UpdateSupportStatusDto,
     adminUserId: string,
   ) {
-    const conversation = await this.getConversationForAdmin(conversationId);
+    const conversation = await this.getConversationForAdmin(conversationId, adminUserId);
     conversation.status = body.status;
 
     if (body.status === SupportConversationStatus.RESOLVED) {
@@ -263,14 +274,16 @@ export class SupportService {
       );
     }
 
-    const fullConversation = await this.getConversationForAdmin(conversationId);
-    this.supportGateway.emitConversationUpdated(conversationId, fullConversation);
+    const fullConversation = await this.getConversationForAdmin(conversationId, adminUserId);
+    await this.emitConversationUpdate(conversationId, conversation.userId);
     await this.supportGateway.emitUnreadCount(conversation.userId, SupportSenderRole.USER);
-    await this.supportGateway.emitUnreadCount('admins', SupportSenderRole.ADMIN);
+    await this.emitUnreadCountsForAdmins();
     return fullConversation;
   }
 
-  async authenticateSocket(client: { handshake: { auth?: { token?: string }; headers?: { authorization?: string } } }) {
+  async authenticateSocket(client: {
+    handshake: { auth?: { token?: string }; headers?: { authorization?: string } };
+  }) {
     const bearerToken =
       client.handshake.auth?.token ??
       client.handshake.headers?.authorization?.replace(/^Bearer\s+/i, '');
@@ -286,7 +299,7 @@ export class SupportService {
 
   async assertSocketConversationAccess(userId: string, role: string, conversationId: string) {
     if (String(role).toLowerCase() === 'admin') {
-      await this.getConversationForAdmin(conversationId);
+      await this.getConversationForAdmin(conversationId, userId);
       return;
     }
 
@@ -294,7 +307,10 @@ export class SupportService {
   }
 
   async getUnreadCount(userId: string, role: string) {
-    const roleKey = String(role).toLowerCase() === 'admin' ? SupportSenderRole.ADMIN : SupportSenderRole.USER;
+    const roleKey =
+      String(role).toLowerCase() === 'admin'
+        ? SupportSenderRole.ADMIN
+        : SupportSenderRole.USER;
 
     const conversations = await this.conversationsRepository.find({
       where: roleKey === SupportSenderRole.USER ? { userId } : {},
@@ -303,7 +319,7 @@ export class SupportService {
 
     const reads = await this.readsRepository.find({
       where: {
-        readerId: roleKey === SupportSenderRole.ADMIN ? 'admins' : userId,
+        readerId: userId,
         readerRole: roleKey,
       },
       relations: { message: true },
@@ -372,6 +388,30 @@ export class SupportService {
     if (newReads.length > 0) {
       await this.readsRepository.save(newReads);
     }
+  }
+
+  private async emitUnreadCountsForAdmins() {
+    const admins = await this.usersRepository.find({
+      where: { role: Role.ADMIN, isActive: true },
+      select: ['id'],
+    });
+
+    await Promise.all(
+      admins.map((admin) =>
+        this.supportGateway.emitUnreadCount(admin.id, SupportSenderRole.ADMIN),
+      ),
+    );
+  }
+
+  private async emitConversationUpdate(conversationId: string, userId: string) {
+    const adminConversation = await this.getConversationForAdmin(conversationId);
+    const userConversation = await this.getConversationForUser(userId, conversationId);
+    this.supportGateway.emitConversationUpdated(
+      conversationId,
+      userId,
+      adminConversation,
+      userConversation,
+    );
   }
 
   private async paginate(

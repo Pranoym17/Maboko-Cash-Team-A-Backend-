@@ -330,8 +330,8 @@ export class AdminController {
   }
 
   @Get('support/conversations/:id')
-  getSupportConversation(@Param('id') id: string) {
-    return this.adminService.getSupportConversation(id);
+  getSupportConversation(@Param('id') id: string, @Req() req: any) {
+    return this.adminService.getSupportConversation(id, req.user.sub);
   }
 
   @Patch('support/conversations/:id/assign')

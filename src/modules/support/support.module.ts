@@ -9,12 +9,13 @@ import { ConfigModule } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { SupportMessageRead } from './entities/support-message-read.entity';
 import { WsJwtAuthGuard } from './ws-jwt-auth.guard';
+import { User } from '../users/entities/user.entity';
 
 @Module({
   imports: [
     ConfigModule,
     JwtModule,
-    TypeOrmModule.forFeature([SupportConversation, SupportMessage, SupportMessageRead]),
+    TypeOrmModule.forFeature([SupportConversation, SupportMessage, SupportMessageRead, User]),
   ],
   providers: [SupportService, SupportGateway, WsJwtAuthGuard],
   controllers: [SupportController],
