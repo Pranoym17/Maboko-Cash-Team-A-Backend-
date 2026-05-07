@@ -25,17 +25,14 @@ export class AuthService {
   ) {}
 
   async register(registerDto: RegisterDto) {
-    const requestedRole =
-      registerDto.role === 'admin' ? Role.ADMIN : Role.USER;
+    const requestedRole = registerDto.role === 'admin' ? Role.ADMIN : Role.USER;
 
     if (requestedRole === Role.ADMIN) {
-      const expectedPasscode =
-        this.configService.get<string>('ADMIN_SIGNUP_PASSCODE');
+      const expectedPasscode = this.configService.get<string>(
+        'ADMIN_SIGNUP_PASSCODE',
+      );
 
-      if (
-        !expectedPasscode ||
-        registerDto.adminPasscode !== expectedPasscode
-      ) {
+      if (!expectedPasscode || registerDto.adminPasscode !== expectedPasscode) {
         throw new ForbiddenException('Invalid admin signup passcode');
       }
     }
@@ -77,6 +74,10 @@ export class AuthService {
     const user = await this.usersService.findByEmail(loginDto.email);
 
     if (!user) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    if (!user.isActive) {
       throw new UnauthorizedException('Invalid credentials');
     }
 

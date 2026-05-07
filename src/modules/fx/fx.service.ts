@@ -20,6 +20,14 @@ import { LedgerEntry } from '../ledger/entities/ledger-entry.entity';
 import { LedgerEntryType } from '../ledger/enums/ledger-entry-type.enum';
 import { User } from '../users/entities/user.entity';
 import { TransactionStatus } from '../transactions/enums/transaction-status.enum';
+import { generateReference } from '../../common/utils/reference.util';
+
+interface ExchangeRateApiResponse {
+  result: string;
+  conversion_rates?: Record<string, number>;
+  time_last_update_utc?: string;
+  time_next_update_utc?: string;
+}
 @Injectable()
 export class FxService {
   constructor(
@@ -126,28 +134,35 @@ export class FxService {
   }
 
   async createFxDeposit(userId: string, dto: FxDepositDto) {
-    const conversion = await this.convertToCdf(dto.sourceCurrency, dto.sourceAmount);
+    const conversion = await this.convertToCdf(
+      dto.sourceCurrency,
+      dto.sourceAmount,
+    );
 
     return this.dataSource.transaction(async (manager) => {
       const userRepository = manager.getRepository(User);
       const walletRepository = manager.getRepository(Wallet);
       const transactionRepository = manager.getRepository(Transaction);
       const ledgerEntryRepository = manager.getRepository(LedgerEntry);
-      const walletTransactionRepository = manager.getRepository(WalletTransaction);
+      const walletTransactionRepository =
+        manager.getRepository(WalletTransaction);
 
-      const user = await userRepository.findOne({
-        where: { id: userId },
-        relations: ['wallet'],
-      });
+      const user = await userRepository.findOne({ where: { id: userId } });
 
       if (!user) {
         throw new NotFoundException('User not found');
       }
 
-      const wallet = await walletRepository.findOne({
-        where: { id: user.wallet.id },
-        relations: ['user'],
-      });
+      if (!user.isActive) {
+        throw new BadRequestException('User account is inactive');
+      }
+
+      const wallet = await walletRepository
+        .createQueryBuilder('wallet')
+        .setLock('pessimistic_write')
+        .leftJoinAndSelect('wallet.user', 'user')
+        .where('user.id = :userId', { userId })
+        .getOne();
 
       if (!wallet) {
         throw new NotFoundException('Wallet not found');
@@ -156,7 +171,7 @@ export class FxService {
       const balanceBefore = Number(wallet.balance);
       const convertedAmount = Number(conversion.convertedAmount);
       const balanceAfter = balanceBefore + convertedAmount;
-      const reference = `FX-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+      const reference = generateReference('FX');
 
       const tx = transactionRepository.create({
         reference,
@@ -165,7 +180,8 @@ export class FxService {
         amount: convertedAmount.toFixed(2),
         currency: 'CDF',
         status: TransactionStatus.COMPLETED,
-        description: dto.description ?? `FX deposit from ${conversion.sourceCurrency}`,
+        description:
+          dto.description ?? `FX deposit from ${conversion.sourceCurrency}`,
         type: 'fx_deposit',
         sourceCurrency: conversion.sourceCurrency,
         sourceAmount: conversion.sourceAmount,
@@ -182,7 +198,8 @@ export class FxService {
         entryType: LedgerEntryType.CREDIT,
         amount: convertedAmount.toFixed(2),
         currency: 'CDF',
-        description: dto.description ?? `FX deposit from ${conversion.sourceCurrency}`,
+        description:
+          dto.description ?? `FX deposit from ${conversion.sourceCurrency}`,
       });
 
       await ledgerEntryRepository.save(ledgerCredit);
@@ -196,7 +213,8 @@ export class FxService {
         status: WalletTransactionStatus.COMPLETED,
         amount: convertedAmount.toFixed(2),
         currency: 'CDF',
-        description: dto.description ?? `FX deposit from ${conversion.sourceCurrency}`,
+        description:
+          dto.description ?? `FX deposit from ${conversion.sourceCurrency}`,
         reference: `${reference}-WALLET`,
         balanceBefore: balanceBefore.toFixed(2),
         balanceAfter: balanceAfter.toFixed(2),
@@ -246,7 +264,7 @@ export class FxService {
     const quote = this.normalize(quoteCurrency);
 
     const url = `https://v6.exchangerate-api.com/v6/${apiKey}/latest/${base}`;
-    const response = await axios.get(url);
+    const response = await axios.get<ExchangeRateApiResponse>(url);
     const data = response.data;
 
     if (data.result !== 'success') {

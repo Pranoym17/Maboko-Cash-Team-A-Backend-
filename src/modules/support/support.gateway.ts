@@ -20,13 +20,19 @@ type AuthenticatedSocket = Socket & {
   };
 };
 
+type SocketUser = NonNullable<AuthenticatedSocket['user']>;
+
 @WebSocketGateway({
   cors: {
-    origin: '*',
+    origin: process.env.WS_CORS_ORIGINS?.split(',').map((origin) =>
+      origin.trim(),
+    ) ?? ['http://localhost:3000', 'http://localhost:3001'],
   },
   namespace: '/support',
 })
-export class SupportGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class SupportGateway
+  implements OnGatewayConnection, OnGatewayDisconnect
+{
   @WebSocketServer()
   server: Server;
 
@@ -37,19 +43,21 @@ export class SupportGateway implements OnGatewayConnection, OnGatewayDisconnect 
 
   async handleConnection(client: AuthenticatedSocket) {
     try {
-      const user = await this.supportService.authenticateSocket(client);
+      const user = (await this.supportService.authenticateSocket(
+        client,
+      )) as SocketUser;
       client.user = user;
-      client.join(`user:${user.sub}`);
+      void client.join(`user:${user.sub}`);
 
       if (String(user.role).toLowerCase() === 'admin') {
-        client.join('admins');
+        void client.join('admins');
       }
     } catch {
       client.disconnect(true);
     }
   }
 
-  handleDisconnect(_client: AuthenticatedSocket) {}
+  handleDisconnect() {}
 
   @UseGuards(WsJwtAuthGuard)
   @SubscribeMessage('support:join')
@@ -65,12 +73,15 @@ export class SupportGateway implements OnGatewayConnection, OnGatewayDisconnect 
     );
 
     if (String(user.role).toLowerCase() === 'admin') {
-      client.join(`conversation:${body.conversationId}:admins`);
+      void client.join(`conversation:${body.conversationId}:admins`);
     } else {
-      client.join(`conversation:${body.conversationId}:user:${user.sub}`);
+      void client.join(`conversation:${body.conversationId}:user:${user.sub}`);
     }
 
-    const unread = await this.supportService.getUnreadCount(user.sub, user.role);
+    const unread = await this.supportService.getUnreadCount(
+      user.sub,
+      user.role,
+    );
     client.emit('support:unread', unread);
     return { ok: true };
   }
@@ -90,7 +101,9 @@ export class SupportGateway implements OnGatewayConnection, OnGatewayDisconnect 
   }
 
   emitConversationCreated(payload: unknown, userId: string) {
-    this.server.to(`user:${userId}`).emit('support:conversation:created', payload);
+    this.server
+      .to(`user:${userId}`)
+      .emit('support:conversation:created', payload);
     this.server.to('admins').emit('support:conversation:created', payload);
   }
 

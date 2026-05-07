@@ -10,7 +10,6 @@ import { BankTransfer } from './entities/bank-transfer.entity';
 import { LinkBankAccountDto } from './dto/link-bank-account.dto';
 import { CreateBankTransferDto } from './dto/create-bank-transfer.dto';
 import { BankTransferStatus } from './enums/bank-transfer-status.enum';
-import { User } from '../users/entities/user.entity';
 import { Wallet } from '../wallets/entities/wallet.entity';
 import { WalletTransaction } from '../wallets/entities/wallet-transaction.entity';
 import { WalletTransactionStatus } from '../wallets/enums/wallet-transaction-status.enum';
@@ -19,6 +18,7 @@ import { Transaction } from '../transactions/entities/transaction.entity';
 import { TransactionStatus } from '../transactions/enums/transaction-status.enum';
 import { LedgerEntry } from '../ledger/entities/ledger-entry.entity';
 import { LedgerEntryType } from '../ledger/enums/ledger-entry-type.enum';
+import { generateReference } from '../../common/utils/reference.util';
 
 @Injectable()
 export class BankTransfersService {
@@ -58,7 +58,6 @@ export class BankTransfersService {
     }
 
     return this.dataSource.transaction(async (manager) => {
-      const userRepo = manager.getRepository(User);
       const walletRepo = manager.getRepository(Wallet);
       const walletTxRepo = manager.getRepository(WalletTransaction);
       const txRepo = manager.getRepository(Transaction);
@@ -66,13 +65,19 @@ export class BankTransfersService {
       const bankAccountRepo = manager.getRepository(BankAccount);
       const bankTransferRepo = manager.getRepository(BankTransfer);
 
-      const user = await userRepo.findOne({
-        where: { id: userId },
-        relations: ['wallet'],
-      });
+      const wallet = await walletRepo
+        .createQueryBuilder('wallet')
+        .setLock('pessimistic_write')
+        .leftJoinAndSelect('wallet.user', 'user')
+        .where('user.id = :userId', { userId })
+        .getOne();
 
-      if (!user || !user.wallet) {
+      if (!wallet || !wallet.user) {
         throw new NotFoundException('User wallet not found');
+      }
+
+      if (!wallet.user.isActive) {
+        throw new BadRequestException('User account is inactive');
       }
 
       const bankAccount = await bankAccountRepo.findOne({
@@ -83,7 +88,6 @@ export class BankTransfersService {
         throw new NotFoundException('Bank account not found');
       }
 
-      const wallet = user.wallet;
       const balanceBefore = Number(wallet.balance);
 
       if (balanceBefore < amount) {
@@ -91,7 +95,7 @@ export class BankTransfersService {
       }
 
       const balanceAfter = balanceBefore - amount;
-      const reference = `BANK-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+      const reference = generateReference('BANK');
 
       const bankTransfer = bankTransferRepo.create({
         userId,

@@ -12,6 +12,12 @@ export const getDatabaseConfig = (configService: ConfigService) => ({
   migrationsRun: configService.get<string>('DB_MIGRATIONS_RUN') !== 'false',
   migrations: [__dirname + '/../database/migrations/*{.ts,.js}'],
   ...(configService.get<string>('DB_SSL') === 'true' && {
-    ssl: { rejectUnauthorized: false },
+    ssl: {
+      rejectUnauthorized:
+        configService.get<string>('DB_SSL_REJECT_UNAUTHORIZED') !== 'false',
+      ...(configService.get<string>('DB_SSL_CA') && {
+        ca: configService.get<string>('DB_SSL_CA'),
+      }),
+    },
   }),
 });

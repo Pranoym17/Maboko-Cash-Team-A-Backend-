@@ -10,6 +10,7 @@ import QRCode from 'qrcode';
 import { randomUUID } from 'crypto';
 import { Role } from '../../common/enums/role.enum';
 import { normalizeDrcPhoneNumber } from '../../common/utils/phone.util';
+import { hashToken } from '../../common/utils/token.util';
 import { User } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { Wallet } from '../wallets/entities/wallet.entity';
@@ -215,14 +216,14 @@ export class UsersService {
 
   async setPasswordResetToken(userId: string, token: string, expiresAt: Date) {
     const user = await this.findById(userId);
-    user.passwordResetToken = token;
+    user.passwordResetToken = hashToken(token);
     user.passwordResetExpiresAt = expiresAt;
     return this.usersRepository.save(user);
   }
 
   async findByPasswordResetToken(token: string): Promise<User | null> {
     return this.usersRepository.findOne({
-      where: { passwordResetToken: token },
+      where: { passwordResetToken: hashToken(token) },
       relations: ['wallet'],
     });
   }

@@ -17,6 +17,7 @@ import { WalletTransactionType } from '../wallets/enums/wallet-transaction-type.
 import { TransactionStatus } from './enums/transaction-status.enum';
 import { ReferralsService } from '../referrals/referrals.service';
 import { normalizeDrcPhoneNumber } from '../../common/utils/phone.util';
+import { generateReference } from '../../common/utils/reference.util';
 
 @Injectable()
 export class TransactionsService {
@@ -48,36 +49,45 @@ export class TransactionsService {
 
     try {
       return await this.dataSource.transaction(async (manager) => {
-        const userRepo = manager.getRepository(User);
         const walletRepo = manager.getRepository(Wallet);
         const txRepo = manager.getRepository(Transaction);
         const ledgerRepo = manager.getRepository(LedgerEntry);
         const walletTxRepo = manager.getRepository(WalletTransaction);
 
-        const sender = await userRepo.findOne({
-          where: { id: senderUserId },
-          relations: ['wallet'],
-        });
+        const wallets = await walletRepo
+          .createQueryBuilder('wallet')
+          .setLock('pessimistic_write')
+          .leftJoinAndSelect('wallet.user', 'user')
+          .where('user.id IN (:...userIds)', {
+            userIds: [senderUserId, receiverUserId].sort(),
+          })
+          .orderBy('wallet.id', 'ASC')
+          .getMany();
 
-        const receiver = await userRepo.findOne({
-          where: { id: receiverUserId },
-          relations: ['wallet'],
-        });
+        const senderWallet = wallets.find(
+          (wallet) => wallet.user.id === senderUserId,
+        );
+        const receiverWallet = wallets.find(
+          (wallet) => wallet.user.id === receiverUserId,
+        );
+        const sender = senderWallet?.user;
+        const receiver = receiverWallet?.user;
 
         if (!sender || !receiver) {
           throw new NotFoundException('User not found');
         }
 
-        if (!sender.wallet) {
+        if (!senderWallet) {
           throw new NotFoundException('Sender wallet not found');
         }
 
-        if (!receiver.wallet) {
+        if (!receiverWallet) {
           throw new NotFoundException('Receiver wallet not found');
         }
 
-        const senderWallet = sender.wallet;
-        const receiverWallet = receiver.wallet;
+        if (!sender.isActive || !receiver.isActive) {
+          throw new BadRequestException('User account is inactive');
+        }
 
         const senderBalance = Number(senderWallet.balance);
         const receiverBalance = Number(receiverWallet.balance);
@@ -86,7 +96,7 @@ export class TransactionsService {
           throw new BadRequestException('Insufficient balance');
         }
 
-        const reference = `TX-${Date.now()}`;
+        const reference = generateReference('TX');
 
         const transaction = txRepo.create({
           reference,
@@ -184,15 +194,22 @@ export class TransactionsService {
         throw new BadRequestException('Already reversed');
       }
 
-      const senderWallet = await walletRepo.findOne({
-        where: { user: { id: tx.senderUserId } },
-        relations: ['user'],
-      });
+      const wallets = await walletRepo
+        .createQueryBuilder('wallet')
+        .setLock('pessimistic_write')
+        .leftJoinAndSelect('wallet.user', 'user')
+        .where('user.id IN (:...userIds)', {
+          userIds: [tx.senderUserId, tx.receiverUserId].sort(),
+        })
+        .orderBy('wallet.id', 'ASC')
+        .getMany();
 
-      const receiverWallet = await walletRepo.findOne({
-        where: { user: { id: tx.receiverUserId } },
-        relations: ['user'],
-      });
+      const senderWallet = wallets.find(
+        (wallet) => wallet.user.id === tx.senderUserId,
+      );
+      const receiverWallet = wallets.find(
+        (wallet) => wallet.user.id === tx.receiverUserId,
+      );
 
       if (!senderWallet) {
         throw new NotFoundException('Sender wallet not found');
@@ -203,6 +220,12 @@ export class TransactionsService {
       }
 
       const amount = Number(tx.amount);
+
+      if (Number(receiverWallet.balance) < amount) {
+        throw new BadRequestException(
+          'Receiver has insufficient balance to reverse',
+        );
+      }
 
       senderWallet.balance = (Number(senderWallet.balance) + amount).toFixed(2);
 

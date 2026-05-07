@@ -10,7 +10,6 @@ import { MobileMoneyDepositDto } from './dto/mobile-money-deposit.dto';
 import { MobileMoneyWithdrawDto } from './dto/mobile-money-withdraw.dto';
 import { MobileMoneyCallbackDto } from './dto/mobile-money-callback.dto';
 import { MobileMoneyStatus } from './enums/mobile-money-status.enum';
-import { User } from '../users/entities/user.entity';
 import { Wallet } from '../wallets/entities/wallet.entity';
 import { WalletTransaction } from '../wallets/entities/wallet-transaction.entity';
 import { WalletTransactionStatus } from '../wallets/enums/wallet-transaction-status.enum';
@@ -19,6 +18,7 @@ import { Transaction } from '../transactions/entities/transaction.entity';
 import { TransactionStatus } from '../transactions/enums/transaction-status.enum';
 import { LedgerEntry } from '../ledger/entities/ledger-entry.entity';
 import { LedgerEntryType } from '../ledger/enums/ledger-entry-type.enum';
+import { generateReference } from '../../common/utils/reference.util';
 
 @Injectable()
 export class MobileMoneyService {
@@ -30,13 +30,18 @@ export class MobileMoneyService {
   ) {}
 
   async createDeposit(userId: string, dto: MobileMoneyDepositDto) {
-    const externalReference = `MM-DEP-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+    const amount = Number(dto.amount);
+    if (amount <= 0) {
+      throw new BadRequestException('Amount must be greater than zero');
+    }
+
+    const externalReference = generateReference('MM-DEP');
 
     const record = this.mobileMoneyRepo.create({
       userId,
       provider: dto.provider,
       phoneNumber: dto.phoneNumber,
-      amount: Number(dto.amount).toFixed(2),
+      amount: amount.toFixed(2),
       currency: 'CDF',
       type: 'deposit',
       status: MobileMoneyStatus.PENDING,
@@ -48,13 +53,18 @@ export class MobileMoneyService {
   }
 
   async createWithdrawal(userId: string, dto: MobileMoneyWithdrawDto) {
-    const externalReference = `MM-WDR-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+    const amount = Number(dto.amount);
+    if (amount <= 0) {
+      throw new BadRequestException('Amount must be greater than zero');
+    }
+
+    const externalReference = generateReference('MM-WDR');
 
     const record = this.mobileMoneyRepo.create({
       userId,
       provider: dto.provider,
       phoneNumber: dto.phoneNumber,
-      amount: Number(dto.amount).toFixed(2),
+      amount: amount.toFixed(2),
       currency: 'CDF',
       type: 'withdrawal',
       status: MobileMoneyStatus.PENDING,
@@ -148,62 +158,75 @@ export class MobileMoneyService {
       throw new NotFoundException('Mobile money transaction not found');
     }
 
-    if (
-      mmTx.status === MobileMoneyStatus.COMPLETED ||
-      mmTx.status === MobileMoneyStatus.FAILED
-    ) {
-      throw new BadRequestException(
-        'Mobile money transaction already finalized',
-      );
-    }
-
-    if (status === MobileMoneyStatus.FAILED) {
-      mmTx.status = MobileMoneyStatus.FAILED;
-      mmTx.callbackMessage = message;
-      return this.mobileMoneyRepo.save(mmTx);
-    }
-
     return this.dataSource.transaction(async (manager) => {
-      const userRepo = manager.getRepository(User);
       const walletRepo = manager.getRepository(Wallet);
       const walletTxRepo = manager.getRepository(WalletTransaction);
       const txRepo = manager.getRepository(Transaction);
       const ledgerRepo = manager.getRepository(LedgerEntry);
       const mmRepo = manager.getRepository(MobileMoneyTransaction);
 
-      const user = await userRepo.findOne({
-        where: { id: mmTx.userId },
-        relations: ['wallet'],
+      const lockedMmTx = await mmRepo.findOne({
+        where: { id: mmTx.id },
+        lock: { mode: 'pessimistic_write' },
       });
 
-      if (!user || !user.wallet) {
+      if (!lockedMmTx) {
+        throw new NotFoundException('Mobile money transaction not found');
+      }
+
+      if (
+        lockedMmTx.status === MobileMoneyStatus.COMPLETED ||
+        lockedMmTx.status === MobileMoneyStatus.FAILED
+      ) {
+        throw new BadRequestException(
+          'Mobile money transaction already finalized',
+        );
+      }
+
+      if (status === MobileMoneyStatus.FAILED) {
+        lockedMmTx.status = MobileMoneyStatus.FAILED;
+        lockedMmTx.callbackMessage = message;
+        return mmRepo.save(lockedMmTx);
+      }
+
+      const wallet = await walletRepo
+        .createQueryBuilder('wallet')
+        .setLock('pessimistic_write')
+        .leftJoinAndSelect('wallet.user', 'user')
+        .where('user.id = :userId', { userId: lockedMmTx.userId })
+        .getOne();
+
+      if (!wallet || !wallet.user) {
         throw new NotFoundException('User wallet not found');
       }
 
-      const wallet = user.wallet;
-      const amount = Number(mmTx.amount);
+      if (!wallet.user.isActive) {
+        throw new BadRequestException('User account is inactive');
+      }
+
+      const amount = Number(lockedMmTx.amount);
       const balanceBefore = Number(wallet.balance);
 
-      if (mmTx.type === 'withdrawal' && balanceBefore < amount) {
-        mmTx.status = MobileMoneyStatus.FAILED;
-        mmTx.callbackMessage = 'Insufficient wallet balance';
-        await mmRepo.save(mmTx);
+      if (lockedMmTx.type === 'withdrawal' && balanceBefore < amount) {
+        lockedMmTx.status = MobileMoneyStatus.FAILED;
+        lockedMmTx.callbackMessage = 'Insufficient wallet balance';
+        await mmRepo.save(lockedMmTx);
         throw new BadRequestException('Insufficient wallet balance');
       }
 
-      const isDeposit = mmTx.type === 'deposit';
+      const isDeposit = lockedMmTx.type === 'deposit';
       const balanceAfter = isDeposit
         ? balanceBefore + amount
         : balanceBefore - amount;
 
       const transaction = txRepo.create({
-        reference: mmTx.externalReference,
-        senderUserId: user.id,
-        receiverUserId: user.id,
+        reference: lockedMmTx.externalReference,
+        senderUserId: wallet.user.id,
+        receiverUserId: wallet.user.id,
         amount: amount.toFixed(2),
         currency: 'CDF',
         status: TransactionStatus.COMPLETED,
-        description: mmTx.description,
+        description: lockedMmTx.description,
         type: isDeposit ? 'mobile_money_deposit' : 'mobile_money_withdrawal',
       });
 
@@ -215,7 +238,7 @@ export class MobileMoneyService {
         entryType: isDeposit ? LedgerEntryType.CREDIT : LedgerEntryType.DEBIT,
         amount: amount.toFixed(2),
         currency: 'CDF',
-        description: mmTx.description,
+        description: lockedMmTx.description,
       });
 
       await ledgerRepo.save(ledgerEntry);
@@ -231,21 +254,21 @@ export class MobileMoneyService {
         status: WalletTransactionStatus.COMPLETED,
         amount: amount.toFixed(2),
         currency: 'CDF',
-        description: mmTx.description,
-        reference: `${mmTx.externalReference}-WALLET`,
+        description: lockedMmTx.description,
+        reference: `${lockedMmTx.externalReference}-WALLET`,
         balanceBefore: balanceBefore.toFixed(2),
         balanceAfter: balanceAfter.toFixed(2),
       });
 
       await walletTxRepo.save(walletTx);
 
-      mmTx.status = MobileMoneyStatus.COMPLETED;
-      mmTx.callbackMessage = message;
-      await mmRepo.save(mmTx);
+      lockedMmTx.status = MobileMoneyStatus.COMPLETED;
+      lockedMmTx.callbackMessage = message;
+      await mmRepo.save(lockedMmTx);
 
       return {
         message: 'Mobile money callback processed successfully',
-        mobileMoneyTransaction: mmTx,
+        mobileMoneyTransaction: lockedMmTx,
         transaction: savedTx,
         wallet: {
           walletId: wallet.id,

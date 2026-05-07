@@ -1,10 +1,12 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { setupSwagger } from './config/swagger.config';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.use(helmet());
 
   app.enableCors({
     origin: [
@@ -26,8 +28,10 @@ async function bootstrap() {
     }),
   );
 
-  setupSwagger(app);
+  if (process.env.SWAGGER_ENABLED !== 'false') {
+    setupSwagger(app);
+  }
 
   await app.listen(process.env.PORT ?? 3000);
 }
-bootstrap();
+void bootstrap();

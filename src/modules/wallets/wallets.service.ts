@@ -4,11 +4,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { Wallet } from './entities/wallet.entity';
 import { WalletTransaction } from './entities/wallet-transaction.entity';
 import { WalletTransactionType } from './enums/wallet-transaction-type.enum';
 import { WalletTransactionStatus } from './enums/wallet-transaction-status.enum';
+import { generateReference } from '../../common/utils/reference.util';
 
 @Injectable()
 export class WalletsService {
@@ -17,6 +18,7 @@ export class WalletsService {
     private readonly walletsRepository: Repository<Wallet>,
     @InjectRepository(WalletTransaction)
     private readonly walletTransactionsRepository: Repository<WalletTransaction>,
+    private readonly dataSource: DataSource,
   ) {}
 
   async getWalletByUserId(userId: string): Promise<Wallet> {
@@ -59,7 +61,10 @@ export class WalletsService {
     };
   }
 
-  async validateSufficientBalance(userId: string, amount: string): Promise<void> {
+  async validateSufficientBalance(
+    userId: string,
+    amount: string,
+  ): Promise<void> {
     const wallet = await this.getWalletByUserId(userId);
 
     const currentBalance = Number(wallet.balance);
@@ -79,33 +84,46 @@ export class WalletsService {
     amount: string,
     description?: string,
   ): Promise<WalletTransaction> {
-    const wallet = await this.getWalletByUserId(userId);
-
     const numericAmount = Number(amount);
 
     if (numericAmount <= 0) {
       throw new BadRequestException('Amount must be greater than zero');
     }
 
-    const balanceBefore = Number(wallet.balance);
-    const balanceAfter = balanceBefore + numericAmount;
+    return this.dataSource.transaction(async (manager) => {
+      const walletRepo = manager.getRepository(Wallet);
+      const walletTxRepo = manager.getRepository(WalletTransaction);
+      const wallet = await walletRepo
+        .createQueryBuilder('wallet')
+        .setLock('pessimistic_write')
+        .leftJoinAndSelect('wallet.user', 'user')
+        .where('user.id = :userId', { userId })
+        .getOne();
 
-    wallet.balance = balanceAfter.toFixed(2);
-    await this.walletsRepository.save(wallet);
+      if (!wallet) {
+        throw new NotFoundException('Wallet not found');
+      }
 
-    const transaction = this.walletTransactionsRepository.create({
-      wallet,
-      type: WalletTransactionType.CREDIT,
-      status: WalletTransactionStatus.COMPLETED,
-      amount: numericAmount.toFixed(2),
-      currency: 'CDF',
-      description: description ?? 'Wallet credit',
-      reference: `CREDIT-${Date.now()}`,
-      balanceBefore: balanceBefore.toFixed(2),
-      balanceAfter: balanceAfter.toFixed(2),
+      const balanceBefore = Number(wallet.balance);
+      const balanceAfter = balanceBefore + numericAmount;
+
+      wallet.balance = balanceAfter.toFixed(2);
+      await walletRepo.save(wallet);
+
+      const transaction = walletTxRepo.create({
+        wallet,
+        type: WalletTransactionType.CREDIT,
+        status: WalletTransactionStatus.COMPLETED,
+        amount: numericAmount.toFixed(2),
+        currency: 'CDF',
+        description: description ?? 'Wallet credit',
+        reference: generateReference('CREDIT'),
+        balanceBefore: balanceBefore.toFixed(2),
+        balanceAfter: balanceAfter.toFixed(2),
+      });
+
+      return walletTxRepo.save(transaction);
     });
-
-    return this.walletTransactionsRepository.save(transaction);
   }
 
   async debitWallet(
@@ -113,29 +131,49 @@ export class WalletsService {
     amount: string,
     description?: string,
   ): Promise<WalletTransaction> {
-    await this.validateSufficientBalance(userId, amount);
-
-    const wallet = await this.getWalletByUserId(userId);
     const numericAmount = Number(amount);
 
-    const balanceBefore = Number(wallet.balance);
-    const balanceAfter = balanceBefore - numericAmount;
+    if (numericAmount <= 0) {
+      throw new BadRequestException('Amount must be greater than zero');
+    }
 
-    wallet.balance = balanceAfter.toFixed(2);
-    await this.walletsRepository.save(wallet);
+    return this.dataSource.transaction(async (manager) => {
+      const walletRepo = manager.getRepository(Wallet);
+      const walletTxRepo = manager.getRepository(WalletTransaction);
+      const wallet = await walletRepo
+        .createQueryBuilder('wallet')
+        .setLock('pessimistic_write')
+        .leftJoinAndSelect('wallet.user', 'user')
+        .where('user.id = :userId', { userId })
+        .getOne();
 
-    const transaction = this.walletTransactionsRepository.create({
-      wallet,
-      type: WalletTransactionType.DEBIT,
-      status: WalletTransactionStatus.COMPLETED,
-      amount: numericAmount.toFixed(2),
-      currency: 'CDF',
-      description: description ?? 'Wallet debit',
-      reference: `DEBIT-${Date.now()}`,
-      balanceBefore: balanceBefore.toFixed(2),
-      balanceAfter: balanceAfter.toFixed(2),
+      if (!wallet) {
+        throw new NotFoundException('Wallet not found');
+      }
+
+      const balanceBefore = Number(wallet.balance);
+      if (balanceBefore < numericAmount) {
+        throw new BadRequestException('Insufficient wallet balance');
+      }
+
+      const balanceAfter = balanceBefore - numericAmount;
+
+      wallet.balance = balanceAfter.toFixed(2);
+      await walletRepo.save(wallet);
+
+      const transaction = walletTxRepo.create({
+        wallet,
+        type: WalletTransactionType.DEBIT,
+        status: WalletTransactionStatus.COMPLETED,
+        amount: numericAmount.toFixed(2),
+        currency: 'CDF',
+        description: description ?? 'Wallet debit',
+        reference: generateReference('DEBIT'),
+        balanceBefore: balanceBefore.toFixed(2),
+        balanceAfter: balanceAfter.toFixed(2),
+      });
+
+      return walletTxRepo.save(transaction);
     });
-
-    return this.walletTransactionsRepository.save(transaction);
   }
 }

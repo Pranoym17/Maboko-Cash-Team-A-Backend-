@@ -5,6 +5,13 @@ import { MobileMoneyService } from './mobile-money.service';
 import { MobileMoneyDepositDto } from './dto/mobile-money-deposit.dto';
 import { MobileMoneyWithdrawDto } from './dto/mobile-money-withdraw.dto';
 import { MobileMoneyCallbackDto } from './dto/mobile-money-callback.dto';
+import { MobileMoneyWebhookGuard } from './guards/mobile-money-webhook.guard';
+
+type AuthenticatedRequest = {
+  user: {
+    sub: string;
+  };
+};
 
 @ApiTags('Mobile Money')
 @Controller('mobile-money')
@@ -15,7 +22,10 @@ export class MobileMoneyController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create simulated mobile money deposit request' })
-  createDeposit(@Req() req: any, @Body() dto: MobileMoneyDepositDto) {
+  createDeposit(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: MobileMoneyDepositDto,
+  ) {
     return this.mobileMoneyService.createDeposit(req.user.sub, dto);
   }
 
@@ -23,12 +33,18 @@ export class MobileMoneyController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create simulated mobile money withdrawal request' })
-  createWithdrawal(@Req() req: any, @Body() dto: MobileMoneyWithdrawDto) {
+  createWithdrawal(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: MobileMoneyWithdrawDto,
+  ) {
     return this.mobileMoneyService.createWithdrawal(req.user.sub, dto);
   }
 
   @Post('callback')
-  @ApiOperation({ summary: 'Simulate telecom callback for mobile money request' })
+  @UseGuards(MobileMoneyWebhookGuard)
+  @ApiOperation({
+    summary: 'Simulate telecom callback for mobile money request',
+  })
   handleCallback(@Body() dto: MobileMoneyCallbackDto) {
     return this.mobileMoneyService.handleCallback(dto);
   }
@@ -37,7 +53,7 @@ export class MobileMoneyController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'List my mobile money transactions' })
-  listMine(@Req() req: any) {
+  listMine(@Req() req: AuthenticatedRequest) {
     return this.mobileMoneyService.listMyTransactions(req.user.sub);
   }
 }

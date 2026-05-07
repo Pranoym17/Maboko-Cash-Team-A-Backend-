@@ -18,11 +18,11 @@ import { WalletTransactionStatus } from '../wallets/enums/wallet-transaction-sta
 import { WalletTransactionType } from '../wallets/enums/wallet-transaction-type.enum';
 import { LedgerEntry } from '../ledger/entities/ledger-entry.entity';
 import { LedgerEntryType } from '../ledger/enums/ledger-entry-type.enum';
-import { UsersService } from '../users/users.service';
 import { CreateRewardRuleDto } from './dto/create-reward-rule.dto';
 import { UpdateRewardRuleDto } from './dto/update-reward-rule.dto';
 import { AdminRewardsQueryDto } from '../admin/dto/admin-rewards-query.dto';
 import { ReferralsService } from '../referrals/referrals.service';
+import { generateReference } from '../../common/utils/reference.util';
 
 @Injectable()
 export class RewardsService {
@@ -35,7 +35,6 @@ export class RewardsService {
     private readonly referralsRepository: Repository<Referral>,
     @InjectDataSource()
     private readonly dataSource: DataSource,
-    private readonly usersService: UsersService,
     @Inject(forwardRef(() => ReferralsService))
     private readonly referralsService: ReferralsService,
   ) {}
@@ -148,7 +147,11 @@ export class RewardsService {
     return this.rewardRulesRepository.save(rewardRule);
   }
 
-  async updateRewardRule(id: string, body: UpdateRewardRuleDto, adminUserId: string) {
+  async updateRewardRule(
+    id: string,
+    body: UpdateRewardRuleDto,
+    adminUserId: string,
+  ) {
     const rule = await this.rewardRulesRepository.findOne({ where: { id } });
 
     if (!rule) {
@@ -236,25 +239,44 @@ export class RewardsService {
   }
 
   private async creditReward(id: string) {
-    const reward = await this.getRewardById(id);
-
-    if (reward.status === RewardStatus.CREDITED) {
-      return reward;
-    }
-
     return this.dataSource.transaction(async (manager) => {
       const walletRepo = manager.getRepository(Wallet);
       const walletTxRepo = manager.getRepository(WalletTransaction);
       const ledgerRepo = manager.getRepository(LedgerEntry);
       const rewardRepo = manager.getRepository(ReferralReward);
 
-      const user = await this.usersService.findById(reward.referrer.id);
-      const wallet = await walletRepo.findOne({
-        where: { user: { id: user.id } },
-        relations: ['user'],
+      const reward = await rewardRepo.findOne({
+        where: { id },
+        relations: {
+          referrer: true,
+          rule: true,
+          referral: true,
+          creditedWallet: true,
+          ledgerEntry: true,
+        },
+        lock: { mode: 'pessimistic_write' },
       });
 
-      if (!wallet) {
+      if (!reward) {
+        throw new NotFoundException('Reward not found');
+      }
+
+      if (reward.status === RewardStatus.CREDITED) {
+        return reward;
+      }
+
+      const wallet = await walletRepo
+        .createQueryBuilder('wallet')
+        .setLock('pessimistic_write')
+        .leftJoinAndSelect('wallet.user', 'user')
+        .where('user.id = :userId', { userId: reward.referrer.id })
+        .getOne();
+
+      if (!wallet || !wallet.user) {
+        throw new NotFoundException('Wallet not found');
+      }
+
+      if (!wallet.user.isActive) {
         throw new NotFoundException('Wallet not found');
       }
 
@@ -271,7 +293,7 @@ export class RewardsService {
           amount: reward.amountCDF,
           currency: 'CDF',
           description: `Referral reward: ${reward.rule.name}`,
-          reference: `REFERRAL-REWARD-${Date.now()}`,
+          reference: generateReference('REFERRAL-REWARD'),
           balanceBefore: balanceBefore.toFixed(2),
           balanceAfter: wallet.balance,
         }),
