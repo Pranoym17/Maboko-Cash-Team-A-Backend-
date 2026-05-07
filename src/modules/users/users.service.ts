@@ -54,6 +54,8 @@ export class UsersService {
       ussdPinHash,
       ussdEnabled: true,
       ussdPinUpdatedAt: new Date(),
+      ussdFailedPinAttempts: 0,
+      ussdLockedUntil: null,
       role: createUserDto.role === 'admin' ? Role.ADMIN : Role.USER,
       referralCode: await this.generateUniqueReferralCode(),
     });
@@ -115,7 +117,30 @@ export class UsersService {
       return false;
     }
 
+    if (user.ussdLockedUntil && user.ussdLockedUntil.getTime() > Date.now()) {
+      return false;
+    }
+
     return bcrypt.compare(ussdPin, user.ussdPinHash);
+  }
+
+  async recordUssdPinFailure(userId: string): Promise<User> {
+    const user = await this.findById(userId);
+    const nextAttempts = (user.ussdFailedPinAttempts ?? 0) + 1;
+    user.ussdFailedPinAttempts = nextAttempts;
+
+    if (nextAttempts >= 3) {
+      user.ussdLockedUntil = new Date(Date.now() + 5 * 60 * 1000);
+    }
+
+    return this.usersRepository.save(user);
+  }
+
+  async recordUssdPinSuccess(userId: string): Promise<User> {
+    const user = await this.findById(userId);
+    user.ussdFailedPinAttempts = 0;
+    user.ussdLockedUntil = null;
+    return this.usersRepository.save(user);
   }
 
   async setUssdPin(userId: string, ussdPin: string): Promise<User> {
@@ -123,6 +148,20 @@ export class UsersService {
     user.ussdPinHash = await bcrypt.hash(ussdPin, 10);
     user.ussdEnabled = true;
     user.ussdPinUpdatedAt = new Date();
+    user.ussdFailedPinAttempts = 0;
+    user.ussdLockedUntil = null;
+    return this.usersRepository.save(user);
+  }
+
+  async setUssdEnabled(userId: string, ussdEnabled: boolean): Promise<User> {
+    const user = await this.findById(userId);
+    user.ussdEnabled = ussdEnabled;
+
+    if (ussdEnabled) {
+      user.ussdFailedPinAttempts = 0;
+      user.ussdLockedUntil = null;
+    }
+
     return this.usersRepository.save(user);
   }
 

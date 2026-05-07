@@ -18,6 +18,7 @@ import { MarketplaceProvider } from '../modules/marketplace/entities/marketplace
 import { SupportConversation } from '../modules/support/entities/support-conversation.entity';
 import { SupportMessage } from '../modules/support/entities/support-message.entity';
 import { SupportMessageRead } from '../modules/support/entities/support-message-read.entity';
+import { UssdTransactionRequest } from '../modules/ussd/entities/ussd-transaction-request.entity';
 
 export default new DataSource({
   type: 'postgres',
@@ -47,6 +48,7 @@ export default new DataSource({
     SupportConversation,
     SupportMessage,
     SupportMessageRead,
+    UssdTransactionRequest,
   ],
   migrations: [__dirname + '/migrations/*{.ts,.js}'],
   ...(process.env.DB_SSL === 'true' && {

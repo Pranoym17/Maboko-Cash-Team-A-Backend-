@@ -45,6 +45,12 @@ export class User {
   @Column({ type: 'timestamptz', nullable: true })
   ussdPinUpdatedAt: Date | null;
 
+  @Column({ default: 0 })
+  ussdFailedPinAttempts: number;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  ussdLockedUntil: Date | null;
+
   @Column({ type: 'text', nullable: true })
   qrCode: string;
 

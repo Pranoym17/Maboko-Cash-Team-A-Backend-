@@ -40,6 +40,7 @@ import { UpdateSupportAssignmentDto } from '../support/dto/update-support-assign
 import { UpdateSupportStatusDto } from '../support/dto/update-support-status.dto';
 import { CreateSupportMessageDto } from '../support/dto/create-support-message.dto';
 import { ResetUssdPinDto } from './dto/reset-ussd-pin.dto';
+import { UpdateUssdStatusDto } from './dto/update-ussd-status.dto';
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -83,6 +84,19 @@ export class AdminController {
     @Req() req: any,
   ) {
     return this.adminService.resetUssdPin(id, body.ussdPin, req.user.sub);
+  }
+
+  @Patch('users/:id/ussd-status')
+  updateUssdStatus(
+    @Param('id') id: string,
+    @Body() body: UpdateUssdStatusDto,
+    @Req() req: any,
+  ) {
+    return this.adminService.updateUssdStatus(
+      id,
+      body.ussdEnabled,
+      req.user.sub,
+    );
   }
 
   @Patch('users/:id/status')

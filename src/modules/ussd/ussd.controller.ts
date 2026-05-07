@@ -18,14 +18,14 @@ export class UssdController {
       const message = error instanceof Error ? error.message : '';
 
       if (message === 'Account not found') {
-        return 'END MabokoCa$h account not found.';
+        return 'END User not found.';
       }
 
       if (message === 'USSD disabled') {
         return 'END USSD access is not enabled for this account.';
       }
 
-      return 'END Invalid selection. Please try again.';
+      return 'END Invalid input.';
     }
   }
 }

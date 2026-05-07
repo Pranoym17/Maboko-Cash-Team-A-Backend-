@@ -308,6 +308,34 @@ export class AdminService {
     };
   }
 
+  async updateUssdStatus(
+    id: string,
+    ussdEnabled: boolean,
+    adminUserId: string,
+  ) {
+    const before = await this.getUserDetail(id);
+    const updatedUser = await this.usersService.setUssdEnabled(
+      id,
+      ussdEnabled,
+    );
+
+    await this.auditService.logAdminAction({
+      adminUserId,
+      actionType: 'admin.user.ussd_status.update',
+      targetEntity: 'user',
+      targetEntityId: id,
+      beforeJson: { ussdEnabled: before.ussdEnabled },
+      afterJson: { ussdEnabled: updatedUser.ussdEnabled },
+    });
+
+    return {
+      userId: updatedUser.id,
+      phoneNumber: updatedUser.phoneNumber,
+      ussdEnabled: updatedUser.ussdEnabled,
+      ussdPinUpdatedAt: updatedUser.ussdPinUpdatedAt,
+    };
+  }
+
   async getUserWallet(userId: string) {
     const user = await this.getUserDetail(userId);
     return this.getWallet(user.wallet.id);
