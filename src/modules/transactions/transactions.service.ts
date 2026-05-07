@@ -16,6 +16,7 @@ import { WalletTransactionStatus } from '../wallets/enums/wallet-transaction-sta
 import { WalletTransactionType } from '../wallets/enums/wallet-transaction-type.enum';
 import { TransactionStatus } from './enums/transaction-status.enum';
 import { ReferralsService } from '../referrals/referrals.service';
+import { normalizeDrcPhoneNumber } from '../../common/utils/phone.util';
 
 @Injectable()
 export class TransactionsService {
@@ -68,8 +69,8 @@ export class TransactionsService {
         }
 
         if (!sender.wallet) {
-            throw new NotFoundException('Sender wallet not found');
-          }
+          throw new NotFoundException('Sender wallet not found');
+        }
 
         if (!receiver.wallet) {
           throw new NotFoundException('Receiver wallet not found');
@@ -201,12 +202,9 @@ export class TransactionsService {
         throw new NotFoundException('Receiver wallet not found');
       }
 
-    
       const amount = Number(tx.amount);
 
-      senderWallet.balance = (
-        Number(senderWallet.balance) + amount
-      ).toFixed(2);
+      senderWallet.balance = (Number(senderWallet.balance) + amount).toFixed(2);
 
       receiverWallet.balance = (
         Number(receiverWallet.balance) - amount
@@ -240,6 +238,27 @@ export class TransactionsService {
   async getAllTransactions() {
     return this.transactionsRepository.find({
       order: { createdAt: 'DESC' },
+    });
+  }
+
+  async createPeerToPeerTransferByRecipientPhone(
+    senderUserId: string,
+    receiverPhoneNumber: string,
+    amount: string,
+    description?: string,
+  ) {
+    const receiver = await this.dataSource.getRepository(User).findOne({
+      where: { phoneNumber: normalizeDrcPhoneNumber(receiverPhoneNumber) },
+    });
+
+    if (!receiver) {
+      throw new NotFoundException('Recipient not found');
+    }
+
+    return this.createPeerToPeerTransfer(senderUserId, {
+      receiverUserId: receiver.id,
+      amount,
+      description,
     });
   }
 

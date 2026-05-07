@@ -18,6 +18,7 @@ import { RewardsModule } from './modules/rewards/rewards.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { MarketplaceModule } from './modules/marketplace/marketplace.module';
 import { SupportModule } from './modules/support/support.module';
+import { UssdModule } from './modules/ussd/ussd.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { SupportModule } from './modules/support/support.module';
     AuditModule,
     MarketplaceModule,
     SupportModule,
+    UssdModule,
   ],
 })
 export class AppModule {}

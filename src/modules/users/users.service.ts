@@ -9,6 +9,7 @@ import * as bcrypt from 'bcrypt';
 import QRCode from 'qrcode';
 import { randomUUID } from 'crypto';
 import { Role } from '../../common/enums/role.enum';
+import { normalizeDrcPhoneNumber } from '../../common/utils/phone.util';
 import { User } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { Wallet } from '../wallets/entities/wallet.entity';
@@ -31,12 +32,28 @@ export class UsersService {
       throw new ConflictException('Email already registered');
     }
 
+    const normalizedPhoneNumber = normalizeDrcPhoneNumber(
+      createUserDto.phoneNumber,
+    );
+    const existingPhoneUser = await this.usersRepository.findOne({
+      where: { phoneNumber: normalizedPhoneNumber },
+    });
+
+    if (existingPhoneUser) {
+      throw new ConflictException('Phone number already registered');
+    }
+
     const passwordHash = await bcrypt.hash(createUserDto.password, 10);
+    const ussdPinHash = await bcrypt.hash(createUserDto.ussdPin, 10);
 
     const user = this.usersRepository.create({
       fullName: createUserDto.fullName,
       email: createUserDto.email,
       passwordHash,
+      phoneNumber: normalizedPhoneNumber,
+      ussdPinHash,
+      ussdEnabled: true,
+      ussdPinUpdatedAt: new Date(),
       role: createUserDto.role === 'admin' ? Role.ADMIN : Role.USER,
       referralCode: await this.generateUniqueReferralCode(),
     });
@@ -86,6 +103,29 @@ export class UsersService {
     });
   }
 
+  async findByPhoneNumber(phoneNumber: string): Promise<User | null> {
+    return this.usersRepository.findOne({
+      where: { phoneNumber: normalizeDrcPhoneNumber(phoneNumber) },
+      relations: ['wallet'],
+    });
+  }
+
+  async verifyUssdPin(user: User, ussdPin: string): Promise<boolean> {
+    if (!user.ussdEnabled || !user.ussdPinHash) {
+      return false;
+    }
+
+    return bcrypt.compare(ussdPin, user.ussdPinHash);
+  }
+
+  async setUssdPin(userId: string, ussdPin: string): Promise<User> {
+    const user = await this.findById(userId);
+    user.ussdPinHash = await bcrypt.hash(ussdPin, 10);
+    user.ussdEnabled = true;
+    user.ussdPinUpdatedAt = new Date();
+    return this.usersRepository.save(user);
+  }
+
   async ensureReferralCode(userId: string): Promise<User> {
     const user = await this.findById(userId);
 
@@ -99,7 +139,9 @@ export class UsersService {
 
   async updateProfile(
     userId: string,
-    updates: Partial<Pick<User, 'fullName' | 'email' | 'isActive'>>,
+    updates: Partial<Pick<User, 'fullName' | 'email' | 'isActive'>> & {
+      phoneNumber?: string;
+    },
   ): Promise<User> {
     const user = await this.findById(userId);
 
@@ -111,6 +153,21 @@ export class UsersService {
       if (existingUser && existingUser.id !== user.id) {
         throw new ConflictException('Email already registered');
       }
+    }
+
+    if (updates.phoneNumber && updates.phoneNumber !== user.phoneNumber) {
+      const normalizedPhoneNumber = normalizeDrcPhoneNumber(
+        updates.phoneNumber,
+      );
+      const existingUser = await this.usersRepository.findOne({
+        where: { phoneNumber: normalizedPhoneNumber },
+      });
+
+      if (existingUser && existingUser.id !== user.id) {
+        throw new ConflictException('Phone number already registered');
+      }
+
+      updates.phoneNumber = normalizedPhoneNumber;
     }
 
     Object.assign(user, updates);
@@ -131,7 +188,10 @@ export class UsersService {
     });
   }
 
-  async resetPasswordByToken(token: string, newPassword: string): Promise<User> {
+  async resetPasswordByToken(
+    token: string,
+    newPassword: string,
+  ): Promise<User> {
     const user = await this.findByPasswordResetToken(token);
 
     if (!user || !user.passwordResetExpiresAt) {
@@ -152,8 +212,9 @@ export class UsersService {
     try {
       const qrCodeDataUrl = await QRCode.toDataURL(userId);
       return qrCodeDataUrl;
-    } catch (error) {
-      throw new Error(`Failed to generate QR code: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      throw new Error(`Failed to generate QR code: ${message}`);
     }
   }
 
@@ -182,7 +243,10 @@ export class UsersService {
 
   private async generateUniqueReferralCode(): Promise<string> {
     for (let attempt = 0; attempt < 10; attempt += 1) {
-      const referralCode = randomUUID().replace(/-/g, '').slice(0, 10).toUpperCase();
+      const referralCode = randomUUID()
+        .replace(/-/g, '')
+        .slice(0, 10)
+        .toUpperCase();
       const existingUser = await this.usersRepository.findOne({
         where: { referralCode },
       });

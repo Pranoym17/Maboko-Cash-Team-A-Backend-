@@ -33,6 +33,18 @@ export class User {
   @Column({ default: true })
   isActive: boolean;
 
+  @Column({ type: 'varchar', unique: true, nullable: true })
+  phoneNumber: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  ussdPinHash: string | null;
+
+  @Column({ default: false })
+  ussdEnabled: boolean;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  ussdPinUpdatedAt: Date | null;
+
   @Column({ type: 'text', nullable: true })
   qrCode: string;
 

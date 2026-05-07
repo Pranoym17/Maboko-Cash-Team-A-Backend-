@@ -234,6 +234,7 @@ export class AdminService {
     const before = {
       fullName: user.fullName,
       email: user.email,
+      phoneNumber: user.phoneNumber,
       isActive: user.isActive,
     };
     const updatedUser = await this.usersService.updateProfile(id, body);
@@ -247,6 +248,7 @@ export class AdminService {
       afterJson: {
         fullName: updatedUser.fullName,
         email: updatedUser.email,
+        phoneNumber: updatedUser.phoneNumber,
         isActive: updatedUser.isActive,
       },
     });
@@ -275,6 +277,34 @@ export class AdminService {
       email: user.email,
       resetLink,
       expiresAt,
+    };
+  }
+
+  async resetUssdPin(id: string, ussdPin: string, adminUserId: string) {
+    const before = await this.getUserDetail(id);
+    const updatedUser = await this.usersService.setUssdPin(id, ussdPin);
+
+    await this.auditService.logAdminAction({
+      adminUserId,
+      actionType: 'admin.user.ussd_pin.reset',
+      targetEntity: 'user',
+      targetEntityId: id,
+      beforeJson: {
+        ussdEnabled: before.ussdEnabled,
+        ussdPinUpdatedAt: before.ussdPinUpdatedAt?.toISOString() ?? null,
+      },
+      afterJson: {
+        ussdEnabled: updatedUser.ussdEnabled,
+        ussdPinUpdatedAt:
+          updatedUser.ussdPinUpdatedAt?.toISOString() ?? null,
+      },
+    });
+
+    return {
+      userId: updatedUser.id,
+      phoneNumber: updatedUser.phoneNumber,
+      ussdEnabled: updatedUser.ussdEnabled,
+      ussdPinUpdatedAt: updatedUser.ussdPinUpdatedAt,
     };
   }
 

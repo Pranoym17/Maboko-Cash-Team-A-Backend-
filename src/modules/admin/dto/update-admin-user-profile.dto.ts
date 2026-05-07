@@ -10,6 +10,10 @@ export class UpdateAdminUserProfileDto {
   email?: string;
 
   @IsOptional()
+  @IsString()
+  phoneNumber?: string;
+
+  @IsOptional()
   @IsBoolean()
   isActive?: boolean;
 }

@@ -39,6 +39,7 @@ import { AdminSupportQueryDto } from './dto/admin-support-query.dto';
 import { UpdateSupportAssignmentDto } from '../support/dto/update-support-assignment.dto';
 import { UpdateSupportStatusDto } from '../support/dto/update-support-status.dto';
 import { CreateSupportMessageDto } from '../support/dto/create-support-message.dto';
+import { ResetUssdPinDto } from './dto/reset-ussd-pin.dto';
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -73,6 +74,15 @@ export class AdminController {
   @Post('users/:id/password-reset-link')
   generatePasswordResetLink(@Param('id') id: string, @Req() req: any) {
     return this.adminService.generatePasswordResetLink(id, req.user.sub);
+  }
+
+  @Post('users/:id/ussd-pin-reset')
+  resetUssdPin(
+    @Param('id') id: string,
+    @Body() body: ResetUssdPinDto,
+    @Req() req: any,
+  ) {
+    return this.adminService.resetUssdPin(id, body.ussdPin, req.user.sub);
   }
 
   @Patch('users/:id/status')
