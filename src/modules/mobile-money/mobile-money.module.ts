@@ -9,6 +9,9 @@ import { WalletTransaction } from '../wallets/entities/wallet-transaction.entity
 import { Transaction } from '../transactions/entities/transaction.entity';
 import { LedgerEntry } from '../ledger/entities/ledger-entry.entity';
 import { MobileMoneyWebhookGuard } from './guards/mobile-money-webhook.guard';
+import { MpesaProvider } from './providers/mpesa.provider';
+import { AirtelProvider } from './providers/airtel.provider';
+import { OrangeProvider } from './providers/orange.provider';
 
 @Module({
   imports: [
@@ -22,7 +25,13 @@ import { MobileMoneyWebhookGuard } from './guards/mobile-money-webhook.guard';
     ]),
   ],
   controllers: [MobileMoneyController],
-  providers: [MobileMoneyService, MobileMoneyWebhookGuard],
+  providers: [
+    MobileMoneyService,
+    MobileMoneyWebhookGuard,
+    MpesaProvider,
+    AirtelProvider,
+    OrangeProvider,
+  ],
   exports: [MobileMoneyService],
 })
 export class MobileMoneyModule {}

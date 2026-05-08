@@ -9,6 +9,7 @@ import { MobileMoneyTransaction } from './entities/mobile-money-transaction.enti
 import { MobileMoneyDepositDto } from './dto/mobile-money-deposit.dto';
 import { MobileMoneyWithdrawDto } from './dto/mobile-money-withdraw.dto';
 import { MobileMoneyCallbackDto } from './dto/mobile-money-callback.dto';
+import { MobileMoneyProvider } from './enums/mobile-money-provider.enum';
 import { MobileMoneyStatus } from './enums/mobile-money-status.enum';
 import { Wallet } from '../wallets/entities/wallet.entity';
 import { WalletTransaction } from '../wallets/entities/wallet-transaction.entity';
@@ -19,6 +20,9 @@ import { TransactionStatus } from '../transactions/enums/transaction-status.enum
 import { LedgerEntry } from '../ledger/entities/ledger-entry.entity';
 import { LedgerEntryType } from '../ledger/enums/ledger-entry-type.enum';
 import { generateReference } from '../../common/utils/reference.util';
+import { MpesaProvider } from './providers/mpesa.provider';
+import { AirtelProvider } from './providers/airtel.provider';
+import { OrangeProvider } from './providers/orange.provider';
 
 @Injectable()
 export class MobileMoneyService {
@@ -27,6 +31,9 @@ export class MobileMoneyService {
     private readonly mobileMoneyRepo: Repository<MobileMoneyTransaction>,
     @InjectDataSource()
     private readonly dataSource: DataSource,
+    private readonly mpesaProvider: MpesaProvider,
+    private readonly airtelProvider: AirtelProvider,
+    private readonly orangeProvider: OrangeProvider,
   ) {}
 
   async createDeposit(userId: string, dto: MobileMoneyDepositDto) {
@@ -37,6 +44,24 @@ export class MobileMoneyService {
 
     const externalReference = generateReference('MM-DEP');
 
+    try {
+      switch (dto.provider) {
+        case MobileMoneyProvider.MPESA:
+          await this.mpesaProvider.initiateDeposit(dto, externalReference);
+          break;
+        case MobileMoneyProvider.AIRTEL_MONEY:
+          await this.airtelProvider.initiateDeposit(dto, externalReference);
+          break;
+        case MobileMoneyProvider.ORANGE_MONEY:
+          await this.orangeProvider.initiateDeposit(dto, externalReference);
+          break;
+        default:
+          throw new BadRequestException('Unsupported mobile money provider');
+      }
+    } catch (error: any) {
+      throw new BadRequestException(`Provider API error: ${error.message}`);
+    }
+
     const record = this.mobileMoneyRepo.create({
       userId,
       provider: dto.provider,
@@ -46,7 +71,7 @@ export class MobileMoneyService {
       type: 'deposit',
       status: MobileMoneyStatus.PENDING,
       externalReference,
-      description: dto.description ?? 'Simulated mobile money deposit',
+      description: dto.description ?? 'Mobile money deposit',
     });
 
     return this.mobileMoneyRepo.save(record);
@@ -60,6 +85,24 @@ export class MobileMoneyService {
 
     const externalReference = generateReference('MM-WDR');
 
+    try {
+      switch (dto.provider) {
+        case MobileMoneyProvider.MPESA:
+          await this.mpesaProvider.initiateWithdrawal(dto, externalReference);
+          break;
+        case MobileMoneyProvider.AIRTEL_MONEY:
+          await this.airtelProvider.initiateWithdrawal(dto, externalReference);
+          break;
+        case MobileMoneyProvider.ORANGE_MONEY:
+          await this.orangeProvider.initiateWithdrawal(dto, externalReference);
+          break;
+        default:
+          throw new BadRequestException('Unsupported mobile money provider');
+      }
+    } catch (error: any) {
+      throw new BadRequestException(`Provider API error: ${error.message}`);
+    }
+
     const record = this.mobileMoneyRepo.create({
       userId,
       provider: dto.provider,
@@ -69,7 +112,7 @@ export class MobileMoneyService {
       type: 'withdrawal',
       status: MobileMoneyStatus.PENDING,
       externalReference,
-      description: dto.description ?? 'Simulated mobile money withdrawal',
+      description: dto.description ?? 'Mobile money withdrawal',
     });
 
     return this.mobileMoneyRepo.save(record);
