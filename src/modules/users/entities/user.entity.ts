@@ -17,6 +17,12 @@ export class User {
   @Column({ unique: true })
   email: string;
 
+  @Column({ type: 'varchar', default: '' })
+  firstName: string;
+
+  @Column({ type: 'varchar', default: '' })
+  lastName: string;
+
   @Column()
   fullName: string;
 
@@ -32,6 +38,9 @@ export class User {
 
   @Column({ default: true })
   isActive: boolean;
+
+  @Column({ type: 'varchar', unique: true, nullable: true })
+  phone: string | null;
 
   @Column({ type: 'varchar', unique: true, nullable: true })
   phoneNumber: string | null;

@@ -10,20 +10,34 @@ import {
 } from 'class-validator';
 
 export class CreateUserDto {
+  @IsOptional()
+  @IsString()
+  firstName?: string;
+
+  @IsOptional()
+  @IsString()
+  lastName?: string;
+
+  @IsOptional()
+  @IsString()
+  fullName?: string;
+
+  @IsOptional()
+  @IsString()
+  email?: string;
+
   @IsString()
   @IsNotEmpty()
-  fullName: string;
-
-  @IsEmail()
-  email: string;
-
-  @IsString()
   @MinLength(8)
   password: string;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  phoneNumber: string;
+  phone?: string;
+
+  @IsOptional()
+  @IsString()
+  phoneNumber?: string;
 
   @IsNumberString()
   @Length(4, 6)

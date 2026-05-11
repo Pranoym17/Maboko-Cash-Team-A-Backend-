@@ -10,6 +10,11 @@ import QRCode from 'qrcode';
 import { randomUUID } from 'crypto';
 import { Role } from '../../common/enums/role.enum';
 import { normalizeDrcPhoneNumber } from '../../common/utils/phone.util';
+import {
+  buildFullName,
+  normalizeEmail,
+  splitFullName,
+} from '../../common/utils/user-profile.util';
 import { hashToken } from '../../common/utils/token.util';
 import { User } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -25,33 +30,46 @@ export class UsersService {
   ) {}
 
   async create(createUserDto: CreateUserDto): Promise<User> {
-    const existingUser = await this.usersRepository.findOne({
-      where: { email: createUserDto.email },
-    });
+    const email = createUserDto.email ? normalizeEmail(createUserDto.email) : null;
+    const existingUser = email ? await this.findByEmail(email) : null;
 
-    if (existingUser) {
+    if (email && existingUser) {
       throw new ConflictException('Email already registered');
     }
 
-    const normalizedPhoneNumber = normalizeDrcPhoneNumber(
-      createUserDto.phoneNumber,
-    );
-    const existingPhoneUser = await this.usersRepository.findOne({
-      where: { phoneNumber: normalizedPhoneNumber },
-    });
+    const providedPhone = createUserDto.phone ?? createUserDto.phoneNumber;
+    const normalizedPhone = providedPhone
+      ? normalizeDrcPhoneNumber(providedPhone)
+      : null;
+
+    const existingPhoneUser = normalizedPhone
+      ? await this.findByPhoneNumber(normalizedPhone)
+      : null;
 
     if (existingPhoneUser) {
       throw new ConflictException('Phone number already registered');
     }
 
+    const splitName = createUserDto.fullName
+      ? splitFullName(createUserDto.fullName)
+      : { firstName: '', lastName: '' };
+
+    const firstName = (createUserDto.firstName ?? splitName.firstName).trim();
+    const lastName = (createUserDto.lastName ?? splitName.lastName).trim();
+    const fullName =
+      createUserDto.fullName?.trim() || buildFullName(firstName, lastName);
+
     const passwordHash = await bcrypt.hash(createUserDto.password, 10);
     const ussdPinHash = await bcrypt.hash(createUserDto.ussdPin, 10);
 
     const user = this.usersRepository.create({
-      fullName: createUserDto.fullName,
-      email: createUserDto.email,
+      firstName,
+      lastName,
+      fullName,
+      email: email || '',
       passwordHash,
-      phoneNumber: normalizedPhoneNumber,
+      phone: normalizedPhone,
+      phoneNumber: normalizedPhone,
       ussdPinHash,
       ussdEnabled: true,
       ussdPinUpdatedAt: new Date(),
@@ -80,10 +98,17 @@ export class UsersService {
   }
 
   async findByEmail(email: string): Promise<User | null> {
-    return this.usersRepository.findOne({
-      where: { email },
-      relations: ['wallet'],
-    });
+    if (!email?.trim()) {
+      return null;
+    }
+
+    const normalizedEmail = normalizeEmail(email);
+
+    return this.usersRepository
+      .createQueryBuilder('user')
+      .leftJoinAndSelect('user.wallet', 'wallet')
+      .where('LOWER(user.email) = :email', { email: normalizedEmail })
+      .getOne();
   }
 
   async findById(id: string): Promise<User> {
@@ -107,8 +132,13 @@ export class UsersService {
   }
 
   async findByPhoneNumber(phoneNumber: string): Promise<User | null> {
+    const normalizedPhoneNumber = normalizeDrcPhoneNumber(phoneNumber);
+
     return this.usersRepository.findOne({
-      where: { phoneNumber: normalizeDrcPhoneNumber(phoneNumber) },
+      where: [
+        { phone: normalizedPhoneNumber },
+        { phoneNumber: normalizedPhoneNumber },
+      ],
       relations: ['wallet'],
     });
   }
@@ -179,38 +209,63 @@ export class UsersService {
 
   async updateProfile(
     userId: string,
-    updates: Partial<Pick<User, 'fullName' | 'email' | 'isActive'>> & {
+    updates: Partial<
+      Pick<User, 'firstName' | 'lastName' | 'fullName' | 'email' | 'isActive'>
+    > & {
+      phone?: string;
       phoneNumber?: string;
     },
   ): Promise<User> {
     const user = await this.findById(userId);
+    const nextEmail = updates.email ? normalizeEmail(updates.email) : undefined;
+    const providedPhone = updates.phone ?? updates.phoneNumber;
+    const nextPhone = providedPhone
+      ? normalizeDrcPhoneNumber(providedPhone)
+      : undefined;
+    const shouldSplitFullName =
+      Boolean(updates.fullName) &&
+      updates.firstName === undefined &&
+      updates.lastName === undefined;
 
-    if (updates.email && updates.email !== user.email) {
-      const existingUser = await this.usersRepository.findOne({
-        where: { email: updates.email },
-      });
+    const splitName = shouldSplitFullName
+      ? splitFullName(updates.fullName ?? '')
+      : { firstName: '', lastName: '' };
+
+    const nextFirstName =
+      updates.firstName ?? (shouldSplitFullName ? splitName.firstName : undefined) ?? user.firstName;
+    const nextLastName =
+      updates.lastName ?? (shouldSplitFullName ? splitName.lastName : undefined) ?? user.lastName;
+
+    if (nextEmail && nextEmail !== normalizeEmail(user.email)) {
+      const existingUser = await this.findByEmail(nextEmail);
 
       if (existingUser && existingUser.id !== user.id) {
         throw new ConflictException('Email already registered');
       }
     }
 
-    if (updates.phoneNumber && updates.phoneNumber !== user.phoneNumber) {
-      const normalizedPhoneNumber = normalizeDrcPhoneNumber(
-        updates.phoneNumber,
-      );
-      const existingUser = await this.usersRepository.findOne({
-        where: { phoneNumber: normalizedPhoneNumber },
-      });
+    if (nextPhone && nextPhone !== (user.phone ?? user.phoneNumber)) {
+      const existingUser = await this.findByPhoneNumber(nextPhone);
 
       if (existingUser && existingUser.id !== user.id) {
         throw new ConflictException('Phone number already registered');
       }
 
-      updates.phoneNumber = normalizedPhoneNumber;
+      updates.phone = nextPhone;
+      updates.phoneNumber = nextPhone;
     }
 
-    Object.assign(user, updates);
+    const nextFullName =
+      buildFullName(nextFirstName, nextLastName) || updates.fullName || user.fullName;
+
+    Object.assign(user, updates, {
+      email: nextEmail ?? user.email,
+      firstName: nextFirstName,
+      lastName: nextLastName,
+      fullName: nextFullName,
+      phone: nextPhone ?? user.phone,
+      phoneNumber: nextPhone ?? user.phoneNumber,
+    });
     return this.usersRepository.save(user);
   }
 
