@@ -22,7 +22,11 @@ type QRCodeResponse = {
 type ScannedQRCodeUserResponse = {
   id: string;
   email: string;
+  firstName: string;
+  lastName: string;
   fullName: string;
+  phone: string | null;
+  phoneNumber: string | null;
   role: string;
   isActive: boolean;
 };
@@ -70,7 +74,11 @@ export class UsersController {
     return {
       id: user.id,
       email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
       fullName: user.fullName,
+      phone: user.phone ?? user.phoneNumber,
+      phoneNumber: user.phoneNumber ?? user.phone,
       role: user.role,
       isActive: user.isActive,
     };

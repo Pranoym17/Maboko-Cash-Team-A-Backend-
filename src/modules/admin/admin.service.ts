@@ -48,6 +48,7 @@ import { AdminSupportQueryDto } from './dto/admin-support-query.dto';
 import { UpdateSupportAssignmentDto } from '../support/dto/update-support-assignment.dto';
 import { UpdateSupportStatusDto } from '../support/dto/update-support-status.dto';
 import { CreateSupportMessageDto } from '../support/dto/create-support-message.dto';
+import { normalizeEmail, toPublicUserProfile } from '../../common/utils/user-profile.util';
 
 @Injectable()
 export class AdminService {
@@ -232,12 +233,18 @@ export class AdminService {
   ) {
     const user = await this.getUserDetail(id);
     const before = {
+      firstName: user.firstName,
+      lastName: user.lastName,
       fullName: user.fullName,
       email: user.email,
+      phone: user.phone ?? user.phoneNumber,
       phoneNumber: user.phoneNumber,
       isActive: user.isActive,
     };
-    const updatedUser = await this.usersService.updateProfile(id, body);
+    const updatedUser = await this.usersService.updateProfile(id, {
+      ...body,
+      email: body.email ? normalizeEmail(body.email) : body.email,
+    });
 
     await this.auditService.logAdminAction({
       adminUserId,
@@ -246,14 +253,17 @@ export class AdminService {
       targetEntityId: id,
       beforeJson: before,
       afterJson: {
+        firstName: updatedUser.firstName,
+        lastName: updatedUser.lastName,
         fullName: updatedUser.fullName,
         email: updatedUser.email,
+        phone: updatedUser.phone ?? updatedUser.phoneNumber,
         phoneNumber: updatedUser.phoneNumber,
         isActive: updatedUser.isActive,
       },
     });
 
-    return updatedUser;
+    return toPublicUserProfile(updatedUser);
   }
 
   async generatePasswordResetLink(id: string, adminUserId: string) {

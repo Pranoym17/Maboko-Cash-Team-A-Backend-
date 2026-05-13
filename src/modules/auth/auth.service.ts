@@ -9,9 +9,15 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { Role } from '../../common/enums/role.enum';
+import { normalizeDrcPhoneNumber } from '../../common/utils/phone.util';
+import {
+  normalizeEmail,
+  toPublicUserProfile,
+} from '../../common/utils/user-profile.util';
 import { UsersService } from '../users/users.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ReferralsService } from '../referrals/referrals.service';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 
@@ -25,6 +31,30 @@ export class AuthService {
   ) {}
 
   async register(registerDto: RegisterDto) {
+    const hasSplitNames =
+      Boolean(registerDto.firstName?.trim()) &&
+      Boolean(registerDto.lastName?.trim());
+    const hasLegacyFullName = Boolean(registerDto.fullName?.trim());
+
+    if (!hasSplitNames && !hasLegacyFullName) {
+      throw new BadRequestException('firstName and lastName are required');
+    }
+
+    const hasEmail = Boolean(registerDto.email?.trim());
+    const hasPhone = Boolean(registerDto.phone?.trim() || registerDto.phoneNumber?.trim());
+
+    if (!hasEmail && !hasPhone) {
+      throw new BadRequestException('email or phone is required');
+    }
+
+    if (!registerDto.password?.trim()) {
+      throw new BadRequestException('password is required');
+    }
+
+    if (!registerDto.ussdPin?.trim()) {
+      throw new BadRequestException('ussdPin is required');
+    }
+
     const requestedRole = registerDto.role === 'admin' ? Role.ADMIN : Role.USER;
 
     if (requestedRole === Role.ADMIN) {
@@ -61,17 +91,22 @@ export class AuthService {
         requestedRole === Role.ADMIN
           ? 'Admin registered successfully'
           : 'User registered successfully',
-      user: {
-        id: user.id,
-        email: user.email,
-        fullName: user.fullName,
-        role: user.role,
-      },
+      user: toPublicUserProfile(user),
     };
   }
 
   async login(loginDto: LoginDto) {
-    const user = await this.usersService.findByEmail(loginDto.email);
+    const identifier = loginDto.identifier?.trim();
+
+    if (!identifier) {
+      throw new BadRequestException('identifier is required');
+    }
+
+    if (!loginDto.password?.trim()) {
+      throw new BadRequestException('password is required');
+    }
+
+    let user = await this.resolveLoginUser(identifier);
 
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
@@ -98,13 +133,33 @@ export class AuthService {
 
     return {
       access_token: await this.jwtService.signAsync(payload),
-      user: {
-        id: user.id,
-        email: user.email,
-        fullName: user.fullName,
-        role: user.role,
-      },
+      user: toPublicUserProfile(user),
     };
+  }
+
+  private async resolveLoginUser(identifier: string) {
+    const trimmedIdentifier = identifier.trim();
+    const lowerIdentifier = normalizeEmail(trimmedIdentifier);
+    const emailLike = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedIdentifier);
+
+    if (emailLike) {
+      return this.usersService.findByEmail(lowerIdentifier);
+    }
+
+    if (trimmedIdentifier.includes('@')) {
+      throw new BadRequestException(
+        'identifier must be a valid email address or phone number',
+      );
+    }
+
+    try {
+      const normalizedPhone = normalizeDrcPhoneNumber(trimmedIdentifier);
+      return this.usersService.findByPhoneNumber(normalizedPhone);
+    } catch {
+      throw new BadRequestException(
+        'identifier must be a valid email address or phone number',
+      );
+    }
   }
 
   async validatePasswordResetToken(token: string) {
@@ -134,6 +189,15 @@ export class AuthService {
 
     return {
       message: 'Password reset successful',
+    };
+  }
+
+  async updateProfile(userId: string, updateProfileDto: UpdateProfileDto) {
+    const user = await this.usersService.updateProfile(userId, updateProfileDto);
+
+    return {
+      message: 'Profile updated successfully',
+      user: toPublicUserProfile(user),
     };
   }
 }
