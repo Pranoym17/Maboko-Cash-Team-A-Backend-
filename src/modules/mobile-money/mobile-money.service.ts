@@ -44,16 +44,17 @@ export class MobileMoneyService {
 
     const externalReference = generateReference('MM-DEP');
 
+    let providerResponse: any;
     try {
       switch (dto.provider) {
         case MobileMoneyProvider.MPESA:
-          await this.mpesaProvider.initiateDeposit(dto, externalReference);
+          providerResponse = await this.mpesaProvider.initiateDeposit(dto, externalReference);
           break;
         case MobileMoneyProvider.AIRTEL_MONEY:
-          await this.airtelProvider.initiateDeposit(dto, externalReference);
+          providerResponse = await this.airtelProvider.initiateDeposit(dto, externalReference);
           break;
         case MobileMoneyProvider.ORANGE_MONEY:
-          await this.orangeProvider.initiateDeposit(dto, externalReference);
+          providerResponse = await this.orangeProvider.initiateDeposit(dto, externalReference);
           break;
         default:
           throw new BadRequestException('Unsupported mobile money provider');
@@ -74,7 +75,20 @@ export class MobileMoneyService {
       description: dto.description ?? 'Mobile money deposit',
     });
 
-    return this.mobileMoneyRepo.save(record);
+    const savedRecord = await this.mobileMoneyRepo.save(record);
+
+    // Auto-approve simulated deposits for demo purposes
+    if (providerResponse?.simulated) {
+      setTimeout(() => {
+        this.handleCallback({
+          externalReference,
+          status: MobileMoneyStatus.COMPLETED,
+          message: 'Simulated successful deposit',
+        }).catch((err) => console.error('Simulated callback failed', err));
+      }, 3000);
+    }
+
+    return savedRecord;
   }
 
   async createWithdrawal(userId: string, dto: MobileMoneyWithdrawDto) {
@@ -85,16 +99,17 @@ export class MobileMoneyService {
 
     const externalReference = generateReference('MM-WDR');
 
+    let providerResponse: any;
     try {
       switch (dto.provider) {
         case MobileMoneyProvider.MPESA:
-          await this.mpesaProvider.initiateWithdrawal(dto, externalReference);
+          providerResponse = await this.mpesaProvider.initiateWithdrawal(dto, externalReference);
           break;
         case MobileMoneyProvider.AIRTEL_MONEY:
-          await this.airtelProvider.initiateWithdrawal(dto, externalReference);
+          providerResponse = await this.airtelProvider.initiateWithdrawal(dto, externalReference);
           break;
         case MobileMoneyProvider.ORANGE_MONEY:
-          await this.orangeProvider.initiateWithdrawal(dto, externalReference);
+          providerResponse = await this.orangeProvider.initiateWithdrawal(dto, externalReference);
           break;
         default:
           throw new BadRequestException('Unsupported mobile money provider');
@@ -115,7 +130,20 @@ export class MobileMoneyService {
       description: dto.description ?? 'Mobile money withdrawal',
     });
 
-    return this.mobileMoneyRepo.save(record);
+    const savedRecord = await this.mobileMoneyRepo.save(record);
+
+    // Auto-approve simulated withdrawals for demo purposes
+    if (providerResponse?.simulated) {
+      setTimeout(() => {
+        this.handleCallback({
+          externalReference,
+          status: MobileMoneyStatus.COMPLETED,
+          message: 'Simulated successful withdrawal',
+        }).catch((err) => console.error('Simulated callback failed', err));
+      }, 3000);
+    }
+
+    return savedRecord;
   }
 
   async handleCallback(dto: MobileMoneyCallbackDto) {
